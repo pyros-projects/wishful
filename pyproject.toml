@@ -1,0 +1,23 @@
+[project]
+name = "wishful"
+version = "0.1.0"
+description = "Wishful thinking for Python"
+readme = "README.md"
+authors = [
+    { name = "Pyro", email = "pyros.sd.models@gmail.com" }
+]
+requires-python = ">=3.12"
+dependencies = [
+    "litellm>=1.40.0",
+    "rich>=13.7.0",
+    "python-dotenv>=1.0.1",
+]
+
+[project.optional-dependencies]
+test = [
+    "pytest>=8.3.0",
+]
+
+[build-system]
+requires = ["uv_build>=0.9.1,<0.10.0"]
+build-backend = "uv_build"
