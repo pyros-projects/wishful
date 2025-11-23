@@ -18,7 +18,7 @@ pip install wishful
 
 **2. Set your credentials** (litellm reads the usual suspects)
 
-Export them or toss them in a `.env` file—we'll find them:
+Export them or toss them in a `.env` file:
 
 
 ```bash
@@ -126,14 +126,14 @@ Set these in your shell or `.env` file:
 
 ## 🛡️ Safety Rails: Wishful Isn't _That_ Reckless
 
-We're not complete anarchists here. Generated code gets AST-scanned to block obviously dangerous patterns:
+Generated code gets AST-scanned to block obviously dangerous patterns:
 
 - ❌ Imports like `os`, `subprocess`, `sys`
 - ❌ Calls to `eval()` or `exec()`
 - ❌ `open()` in write/append mode
 - ❌ Shenanigans like `os.system()` or `subprocess.call()`
 
-**Override at your own peril**: `WISHFUL_UNSAFE=1` or `allow_unsafe=True` turns off the guardrails. We won't judge. (We will _totally_ judge.)
+**Override at your own peril**: `WISHFUL_UNSAFE=1` or `allow_unsafe=True` turns off the guardrails.
 
 ---
 
@@ -200,7 +200,7 @@ A: Define "production." 🙃
 A: That's what the cache is for. Check `.wishful/`, tweak it, commit it, and it's locked in.
 
 **Q: Can I use this with OpenAI/Claude/local models?**  
-A: Yep! We use `litellm`, so anything it supports, we support.
+A: Yes! Built on `litellm`, so anything it supports works here.
 
 **Q: What if I import something that doesn't make sense?**  
 A: The LLM will do its best. Results may vary. Hilarity may ensue.
