@@ -79,7 +79,7 @@ print("\n=== Peak Absurdity ===")
 # desired: generate Lorem Ipsum style text but with random tech buzzwords
 print(f"Fake ipsum: {generate_fake_ipsum(words=15)}")
 # desired: generate a random plausible-sounding excuse for being late
-print(f"Excuse generator: {random_excuse()}")
+print(f"Excuse generator: {random_excuse(include_traffic=True, include_words=generate_fake_ipsum(words=5))}")
 # desired: play rock-paper-scissors-lizard-spock, return winner explanation
 result = rock_paper_scissors_lizard_spock("rock", "spock")
 print(f"Rock vs Spock: {result}")
