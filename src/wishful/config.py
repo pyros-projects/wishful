@@ -29,7 +29,7 @@ class Settings:
     debug: bool = os.getenv("WISHFUL_DEBUG", "0") == "1"
     allow_unsafe: bool = os.getenv("WISHFUL_UNSAFE", "0") == "1"
     spinner: bool = os.getenv("WISHFUL_SPINNER", "1") != "0"
-    max_tokens: int = int(os.getenv("WISHFUL_MAX_TOKENS", "800"))
+    max_tokens: int = int(os.getenv("WISHFUL_MAX_TOKENS", "4096"))
     temperature: float = float(os.getenv("WISHFUL_TEMPERATURE", "1"))
 
     def copy(self) -> "Settings":
