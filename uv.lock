@@ -1450,7 +1450,7 @@ wheels = [
 
 [[package]]
 name = "wishful"
-version = "0.1.1"
+version = "0.1.3"
 source = { editable = "." }
 dependencies = [
     { name = "litellm" },
@@ -1463,6 +1463,11 @@ test = [
     { name = "pytest" },
 ]
 
+[package.dev-dependencies]
+dev = [
+    { name = "pytest" },
+]
+
 [package.metadata]
 requires-dist = [
     { name = "litellm", specifier = ">=1.40.0" },
@@ -1471,6 +1476,9 @@ requires-dist = [
     { name = "rich", specifier = ">=13.7.0" },
 ]
 provides-extras = ["test"]
+
+[package.metadata.requires-dev]
+dev = [{ name = "pytest", specifier = ">=9.0.1" }]
 
 [[package]]
 name = "yarl"
