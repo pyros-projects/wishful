@@ -8,6 +8,7 @@ from typing import List
 
 from wishful.cache import manager as cache
 from wishful.config import configure, reset_defaults, settings
+from wishful.core.discovery import set_context_radius as _set_context_radius
 from wishful.core.finder import install as install_finder
 from wishful.llm.client import GenerationError
 from wishful.safety.validator import SecurityError
@@ -20,6 +21,7 @@ __all__ = [
     "clear_cache",
     "inspect_cache",
     "regenerate",
+    "set_context_radius",
     "SecurityError",
     "GenerationError",
 ]
@@ -49,6 +51,11 @@ def regenerate(module_name: str) -> None:
     cache.delete_cached(module_name)
     sys.modules.pop(module_name, None)
     importlib.invalidate_caches()
+
+
+def set_context_radius(radius: int) -> None:
+    """Adjust how many surrounding lines are sent as context to the LLM."""
+    _set_context_radius(radius)
 
 
 __version__ = "0.1.0"

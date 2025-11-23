@@ -122,6 +122,10 @@ wishful.configure(
     cache_dir="/tmp/.wishful",  # Hide your wishes somewhere else
     spinner=False,              # Silence the "generating..." spinner
     review=True,                # Paranoid? Review code before it runs
+    # Control how much nearby code is sent to the LLM for context
+    # (applies to both import lines and call sites)
+    # or set via WISHFUL_CONTEXT_RADIUS env var.
+    # Example: wishful.set_context_radius(6)
     allow_unsafe=False,         # Keep the safety rails ON (recommended)
 )
 ```
@@ -138,6 +142,10 @@ Set these in your shell or `.env` file:
 - `WISHFUL_SPINNER` — set to `0` to disable the fancy spinner
 - `WISHFUL_MAX_TOKENS` — cap the LLM's verbosity (default: 800)
 - `WISHFUL_TEMPERATURE` — creativity dial (default: 0 = boring but safe)
+- `WISHFUL_CONTEXT_RADIUS` — how many surrounding lines to capture for context (default: 3). Also applied to call sites of requested symbols.
+
+Context harvesting
+- wishful forwards code/comments around the import line **and** around call sites of the requested symbols. The number of lines captured on each side is controlled by `wishful.set_context_radius(n)` or `WISHFUL_CONTEXT_RADIUS`.
 
 ---
 

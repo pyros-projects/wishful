@@ -1,0 +1,32 @@
+name: test
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+jobs:
+  tests:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install uv
+        run: |
+          curl -LsSf https://astral.sh/uv/install.sh | sh
+          echo "$HOME/.cargo/bin" >> $GITHUB_PATH
+
+      - name: Sync dependencies
+        run: uv sync --frozen
+
+      - name: Run tests
+        env:
+          WISHFUL_FAKE_LLM: "1"
+        run: uv run pytest -q

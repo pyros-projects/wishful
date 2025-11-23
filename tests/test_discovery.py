@@ -3,6 +3,7 @@
 import pytest
 
 from wishful.core.discovery import ImportContext, _parse_imported_names, discover
+from wishful.core import discovery
 
 
 def test_parse_imported_names_from_import():
@@ -48,3 +49,25 @@ def test_discover_returns_empty_when_no_context():
     ctx = discover("wishful.nonexistent")
     assert isinstance(ctx, ImportContext)
     # May have empty functions or context depending on call site
+
+
+def test_set_context_radius_updates(monkeypatch):
+    """Ensure the exported setter updates discovery radius."""
+    discovery.set_context_radius(7)
+    assert discovery._context_radius == 7
+
+
+def test_gather_usage_context_includes_calls(tmp_path):
+    """Call sites should add surrounding lines to context."""
+    sample = tmp_path / "sample.py"
+    sample.write_text(
+        "from wishful.text import foo\n"
+        "# note: foo returns value\n"
+        "foo(1)\n"
+        "# trailing comment\n"
+    )
+
+    snippets = discovery._gather_usage_context(str(sample), ["foo"], radius=1)
+    assert snippets, "expected at least one usage snippet"
+    # radius=1 should include the line before and after the call
+    assert any("# note" in s and "# trailing" in s for s in snippets)
