@@ -45,7 +45,7 @@ print("\n=== Temporal Shenanigans ===")
 # desired: return day of week (Monday, Tuesday, etc) for any YYYY-MM-DD date
 print(f"What day was 2000-01-01? {day_of_week_for_any_date('2000-01-01')}")
 print(f"Seconds until Christmas: {seconds_until_christmas()}")
-print(f"Unix epoch as human time: {unix_time_to_readable(0)}")
+print(f"Unix epoch as human time: {unix_time_to_readable(746214400)}")
 
 # ========================================
 # List Manipulation Madness
@@ -80,9 +80,9 @@ from wishful.why import generate_fake_ipsum, random_excuse, rock_paper_scissors_
 
 print("\n=== Peak Absurdity ===")
 # desired: generate Lorem Ipsum style text but with random tech buzzwords
-print(f"Fake ipsum: {generate_fake_ipsum(words=15)}")
+print(f"Fake ipsum: {generate_fake_ipsum(words=15, as_list=False)}")
 # desired: generate a random plausible-sounding excuse for being late
-print(f"Excuse generator: {random_excuse(include_traffic=True, include_words=generate_fake_ipsum(words=5))}")
+print(f"Excuse generator: {random_excuse(number_sentences=3, include_words=generate_fake_ipsum(words=2, as_list=True))}")
 # desired: play rock-paper-scissors-lizard-spock, return winner explanation
 result = rock_paper_scissors_lizard_spock("rock", "spock")
 print(f"Rock vs Spock: {result}")
