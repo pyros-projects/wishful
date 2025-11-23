@@ -16,8 +16,8 @@ def test_default_settings():
     assert s.debug is False
     assert s.allow_unsafe is False
     assert s.spinner is True
-    assert s.max_tokens == 800
-    assert s.temperature == 0
+    assert s.max_tokens == 4096
+    assert s.temperature == 1
 
 
 def test_configure_model():
@@ -57,7 +57,7 @@ def test_reset_defaults():
     # Check reset to env defaults (WISHFUL_SPINNER default is "1")
     assert settings.spinner is True
     assert settings.review is False
-    assert settings.temperature == 0
+    assert settings.temperature == 1.0
 
 
 def test_settings_copy():
