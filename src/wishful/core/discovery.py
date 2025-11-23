@@ -3,9 +3,13 @@ from __future__ import annotations
 import ast
 import inspect
 import linecache
+import os
 from pathlib import Path
 from textwrap import dedent
 from typing import List, Optional, Sequence, Tuple
+
+# Default radius for surrounding-context capture; configurable via env + setter.
+_context_radius = int(os.getenv("WISHFUL_CONTEXT_RADIUS", "3"))
 
 
 class ImportContext:
@@ -21,7 +25,7 @@ def _gather_context_lines(filename: str, lineno: int, radius: int = 2) -> str:
     lines = linecache.getlines(filename)
     if not lines:
         return ""
-    start = max(lineno, 1) - 1
+    start = max(lineno - radius, 1) - 1
     end = min(lineno + radius, len(lines))
     snippet = lines[start:end]
     return "".join(snippet).strip()
@@ -77,9 +81,57 @@ def discover(fullname: str) -> ImportContext:
         if code_line:
             functions = _parse_imported_names(code_line, fullname)
             if functions:
-                context = _gather_context_lines(filename, lineno + 1, radius=3)
-                return ImportContext(functions=functions, context=context)
+                context_parts: list[str] = []
+                context_parts.append(_gather_context_lines(filename, lineno, radius=_context_radius))
+                usage_snippets = _gather_usage_context(filename, functions, radius=_context_radius)
+                context_parts.extend(usage_snippets)
+                context = "\n\n".join(part for part in context_parts if part)
+                return ImportContext(functions=functions, context=context or None)
 
         frame = frame.f_back
 
     return ImportContext(functions=[], context=None)
+
+
+def _gather_usage_context(filename: str, functions: Sequence[str], radius: int) -> list[str]:
+    """Collect context snippets around call sites of the requested functions."""
+    if not functions:
+        return []
+
+    try:
+        source = Path(filename).read_text()
+    except OSError:
+        return []
+
+    try:
+        tree = ast.parse(source)
+    except SyntaxError:
+        return []
+
+    snippets: list[str] = []
+    targets = set(functions)
+
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Call):
+            func = node.func
+            if isinstance(func, ast.Name) and func.id in targets:
+                snippet = _gather_context_lines(filename, node.lineno, radius=radius)
+                if snippet:
+                    snippets.append(snippet)
+
+    # Deduplicate while preserving order
+    seen = set()
+    unique: list[str] = []
+    for snippet in snippets:
+        if snippet not in seen:
+            seen.add(snippet)
+            unique.append(snippet)
+    return unique
+
+
+def set_context_radius(radius: int) -> None:
+    """Update the global context radius used for import discovery."""
+    global _context_radius
+    if radius < 0:
+        raise ValueError("context radius must be non-negative")
+    _context_radius = radius

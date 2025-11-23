@@ -9,7 +9,10 @@ stop asking "should I?" and start asking "what if?"
 # Mathematical Nonsense
 # ========================================
 
+import wishful
 from wishful.omg import nth_digit_of_pi, prime_factors, fibonacci_mod_cheese
+
+wishful.clear_cache()
 
 print("=== Mathematical Chaos ===")
 print(f"100th digit of π: {nth_digit_of_pi(100)}")

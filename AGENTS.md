@@ -187,7 +187,7 @@ Understanding the import pipeline is the most important conceptual model for thi
    - Before generating or executing code, `MagicLoader.exec_module` calls `discover(fullname)` from `core.discovery`.
    - `discover()` walks the Python stack to find the import site:
      - Parses the import statement into requested symbol names (e.g. `extract_emails`).
-     - Captures lines around the import (currently a small radius) as textual context (comments, nearby code).
+     - Captures lines around the import, plus call-site snippets elsewhere in the file, within a configurable radius (`WISHFUL_CONTEXT_RADIUS` or `wishful.set_context_radius`).
    - Returns an `ImportContext(functions=[...], context=str | None)`.
 
 4. **Cache check and optional LLM generation**
@@ -228,6 +228,7 @@ Configuration is centralized in `src/wishful/config.py` via the `Settings` datac
 - `spinner: bool` – enable/disable the rich spinner UI.
 - `max_tokens: int` – upper bound for LLM response tokens.
 - `temperature: float` – LLM sampling temperature.
+- (Context discovery radius is configured separately via `wishful.set_context_radius(n)` or `WISHFUL_CONTEXT_RADIUS`; it is not a `Settings` field.)
 
 Use `wishful.configure(...)` at runtime to change these values programmatically:
 
@@ -257,10 +258,11 @@ Loaded via `python-dotenv` (`load_dotenv()` at module import). Relevant variable
   - `WISHFUL_REVIEW` – `"1"` enables review mode.
   - `WISHFUL_DEBUG` – `"1"` enables debug mode (where implemented).
   - `WISHFUL_UNSAFE` – `"1"` disables safety checks (dangerous).
-  - `WISHFUL_SPINNER` – `"0"` disables the spinner.
-  - `WISHFUL_MAX_TOKENS` – integer.
-  - `WISHFUL_TEMPERATURE` – float.
-  - `WISHFUL_FAKE_LLM` – `"1"` enables fake, deterministic generation (no network).
+- `WISHFUL_SPINNER` – `"0"` disables the spinner.
+- `WISHFUL_MAX_TOKENS` – integer.
+- `WISHFUL_TEMPERATURE` – float.
+- `WISHFUL_CONTEXT_RADIUS` – integer; number of lines before/after import lines and call sites to include in context (default 3).
+- `WISHFUL_FAKE_LLM` – `"1"` enables fake, deterministic generation (no network).
 
 When working on the project:
 
@@ -487,6 +489,7 @@ Do not add provider‑specific logic directly into wishful modules; keep things 
 - **Use `uv` for everything** inside this repo:
   - `uv sync`, `uv run`, `uv add`, `uv lock`.
   - Avoid raw `pip`, `virtualenv`, or `python` commands for project tasks.
+- **Versioning:** Before committing, bump the patch version in `pyproject.toml` (keep major/minor unless intentionally releasing). This keeps published artifacts and commits aligned.
 - Before larger refactors:
   - Read this file plus `README.md` and, if relevant, `docs/ideas/advanced_context_discovery.md`.
   - Skim the matching test file(s) to understand expected behavior.
@@ -495,4 +498,3 @@ Do not add provider‑specific logic directly into wishful modules; keep things 
   - Optionally run the full suite before opening a PR or handing off work.
 
 With these guidelines, you should be able to work effectively on `wishful` without extensive exploratory digging. Happy wishing! ✨
-
