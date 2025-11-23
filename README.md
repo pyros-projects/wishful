@@ -78,6 +78,8 @@ The AI sees your comment and knows _exactly_ what you're after. It's like pair p
 
 ## 🗄️ Cache Ops: Because Sometimes Wishes Need Revising
 
+### Python API
+
 ```python
 import wishful
 
@@ -89,6 +91,21 @@ wishful.regenerate("wishful.text")  # Next import re-generates from scratch
 
 # Nuclear option: forget everything
 wishful.clear_cache()  # Deletes the entire .wishful/ directory
+```
+
+### CLI Commands
+
+wishful comes with a command-line interface for managing your cache:
+
+```bash
+# View all cached modules
+wishful inspect
+
+# Clear the entire cache
+wishful clear
+
+# Regenerate a specific module
+wishful regen wishful.text
 ```
 
 The cache is just regular Python files in `.wishful/`. Want to tweak the generated code? Edit it directly. It's your wish, after all.
@@ -187,6 +204,81 @@ print(total)  # 1060 (probably)
 from wishful.dates import parse_fuzzy_date
 
 print(parse_fuzzy_date("next Tuesday"))  # Your guess is as good as mine
+```
+
+---
+
+## 💻 Development: Working with This Repo
+
+This project uses [uv](https://docs.astral.sh/uv/) for blazing-fast Python package management.
+
+### Setup
+
+```bash
+# Install uv if needed
+curl -LsSf https://astral.sh/uv/install.sh | sh
+
+# Clone the repo
+git clone https://github.com/pyros-projects/wishful.git
+cd wishful
+
+# Install dependencies (uv handles everything)
+uv sync
+```
+
+### Running Tests
+
+```bash
+# Run the full test suite
+uv run pytest tests/ -v
+
+# Run a specific test file
+uv run pytest tests/test_import_hook.py -v
+
+# Run with coverage
+uv run pytest --cov=wishful tests/
+```
+
+### Running Examples
+
+All examples support `WISHFUL_FAKE_LLM=1` for deterministic testing:
+
+```bash
+# Run with fake LLM (no API calls)
+WISHFUL_FAKE_LLM=1 uv run python examples/00_quick_start.py
+
+# Run with real LLM (requires API keys)
+uv run python examples/00_quick_start.py
+```
+
+### Adding Dependencies
+
+```bash
+# Add a runtime dependency
+uv add package-name
+
+# Add a dev dependency
+uv add --dev package-name
+
+# Update all dependencies
+uv lock --upgrade
+```
+
+### Project Structure
+
+```
+wishful/
+├── src/wishful/          # Main package
+│   ├── __init__.py       # Public API
+│   ├── __main__.py       # CLI interface
+│   ├── config.py         # Configuration
+│   ├── cache/            # Cache management
+│   ├── core/             # Import hooks
+│   ├── llm/              # LLM integration
+│   └── safety/           # Safety validation
+├── tests/                # Test suite
+├── examples/             # Usage examples
+└── pyproject.toml        # Project config
 ```
 
 ---

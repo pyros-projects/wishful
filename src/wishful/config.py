@@ -85,6 +85,14 @@ def configure(
 
 def reset_defaults() -> None:
     """Reset settings to environment-driven defaults (useful for tests)."""
-
-    global settings
-    settings = Settings()
+    # Create new defaults and copy to existing settings object
+    # This ensures all existing references to settings get updated
+    defaults = Settings()
+    settings.model = defaults.model
+    settings.cache_dir = defaults.cache_dir
+    settings.review = defaults.review
+    settings.debug = defaults.debug
+    settings.allow_unsafe = defaults.allow_unsafe
+    settings.spinner = defaults.spinner
+    settings.max_tokens = defaults.max_tokens
+    settings.temperature = defaults.temperature

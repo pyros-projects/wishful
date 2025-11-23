@@ -12,3 +12,4 @@ wheels/
 .pytest_cache/
 coverage.xml
 .coverage
+.internal/
