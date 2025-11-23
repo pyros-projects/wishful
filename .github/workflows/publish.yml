@@ -8,7 +8,7 @@ on:
       - 'pyproject.toml'
 
 jobs:
-  publish:
+  test-and-publish:
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -27,8 +27,23 @@ jobs:
         with:
           enable-cache: true
 
+      - name: Install dependencies
+        run: uv sync
+
+      - name: Run test suite
+        run: uv run pytest tests/ -v
+        env:
+          WISHFUL_FAKE_LLM: "1"
+
       - name: Build package
         run: uv build
+
+      - name: Sanity check import
+        run: |
+          uv pip install dist/*.whl
+          uv run python -c "import wishful; print(f'✓ wishful {wishful.__version__} imported successfully')"
+        env:
+          WISHFUL_FAKE_LLM: "1"
 
       - name: Publish to PyPI
         uses: pypa/gh-action-pypi-publish@release/v1
