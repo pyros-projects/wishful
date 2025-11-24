@@ -51,10 +51,16 @@ def inspect_cache() -> List[str]:
 
 
 def regenerate(module_name: str) -> None:
-    """Force regeneration of a module on next import."""
-
+    """Force regeneration of a module on next import.
+    
+    Accepts module names with or without the wishful.static prefix.
+    Example: regenerate('users') or regenerate('wishful.static.users')
+    """
+    # Ensure it has the wishful prefix
     if not module_name.startswith("wishful"):
-        module_name = f"wishful.{module_name}"
+        # Default to static namespace for backward compatibility
+        module_name = f"wishful.static.{module_name}"
+    
     cache.delete_cached(module_name)
     sys.modules.pop(module_name, None)
     importlib.invalidate_caches()

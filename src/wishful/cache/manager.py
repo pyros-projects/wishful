@@ -8,9 +8,12 @@ from wishful.config import settings
 
 
 def module_path(fullname: str) -> Path:
-    # Strip leading namespace "wishful" and map dots to directories.
+    # Strip leading namespace "wishful" (and static/dynamic) and map dots to directories.
     parts = fullname.split(".")
     if parts[0] == "wishful":
+        parts = parts[1:]
+    # Also strip 'static' or 'dynamic' if present
+    if parts and parts[0] in ("static", "dynamic"):
         parts = parts[1:]
     relative = Path(*parts) if parts else Path("__init__")
     return settings.cache_dir / relative.with_suffix(".py")

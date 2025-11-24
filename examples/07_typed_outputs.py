@@ -35,7 +35,7 @@ def example_simple_type_registration():
     heading("Example 1: Simple Type Registration")
     
     # The LLM knows about the Book type and can use it
-    from wishful.library import create_sample_book
+    from wishful.static.library import create_sample_book
     
     book = create_sample_book()
     print(f"Generated book: {book}")
@@ -57,7 +57,7 @@ def example_typed_output():
     heading("Example 2: Typed Function Output")
     
     # The LLM will generate parse_user_data to return a UserProfile
-    from wishful.users import parse_user_data
+    from wishful.static.users import parse_user_data
     
     raw_data = "John Doe, john@example.com, 30"
     profile = parse_user_data(raw_data)
@@ -88,7 +88,7 @@ wishful.type(ProductInfo, output_for=["parse_product", "create_product"])
 def example_shared_type():
     heading("Example 3: Multiple Functions with Shared Type")
     
-    from wishful.products import parse_product, create_product
+    from wishful.static.products import parse_product, create_product
     
     # Both functions return ProductInfo
     product1 = parse_product("Laptop,$999.99,true,Electronics")
@@ -128,7 +128,7 @@ def example_nested_types():
     heading("Example 4: Nested Complex Types")
     
     # The LLM knows about both Address and ContactInfo
-    from wishful.contacts import extract_contact_info
+    from wishful.static.contacts import extract_contact_info
     
     text = """
     Name: Alice Smith
@@ -163,7 +163,7 @@ class Person:
 def example_validated_types():
     heading("Example 5: Types with Validation")
     
-    from wishful.people import validate_age, calculate_birth_year
+    from wishful.static.people import validate_age, calculate_birth_year
     
     # validate_age checks if age is in valid range
     result = validate_age("25")

@@ -95,7 +95,7 @@ def _matches_import(name: str, fullname: str) -> bool:
     return name.startswith("wishful") and fullname.startswith(name)
 
 
-def discover(fullname: str) -> ImportContext:
+def discover(fullname: str, runtime_context: dict | None = None) -> ImportContext:
     """Attempt to recover requested symbol names and nearby comments."""
 
     for filename, lineno in _iter_relevant_frames(fullname):

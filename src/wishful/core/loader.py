@@ -13,10 +13,16 @@ from wishful.ui import spinner
 
 
 class MagicLoader(importlib.abc.Loader):
-    """Loader that returns dynamic modules backed by cache + LLM generation."""
+    """Loader that returns dynamic modules backed by cache + LLM generation.
+    
+    Supports two modes:
+    - 'static': Traditional cached behavior (default)
+    - 'dynamic': Regenerates with runtime context on every access
+    """
 
-    def __init__(self, fullname: str):
+    def __init__(self, fullname: str, mode: str = "static"):
         self.fullname = fullname
+        self.mode = mode  # 'static' or 'dynamic'
 
     def create_module(self, spec):  # pragma: no cover - default works
         return None
@@ -39,7 +45,9 @@ class MagicLoader(importlib.abc.Loader):
                 type_schemas=context.type_schemas,
                 function_output_types=context.function_output_types,
             )
-        cache.write_cached(self.fullname, source)
+        # Only write to cache in static mode
+        if self.mode == "static":
+            cache.write_cached(self.fullname, source)
         return source
 
     def _exec_source(self, source: str, module: ModuleType, clear_first: bool = False) -> None:
@@ -78,6 +86,11 @@ class MagicLoader(importlib.abc.Loader):
         return {k for k in module.__dict__ if not k.startswith("__")}
 
     def _load_source(self, context) -> tuple[str, bool]:
+        # Dynamic mode: always regenerate, never use cache
+        if self.mode == "dynamic":
+            return self._generate_and_cache(context.functions, context), False
+        
+        # Static mode: use cache if available
         source = cache.read_cached(self.fullname)
         if source is not None:
             return source, True
