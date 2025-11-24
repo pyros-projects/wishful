@@ -34,15 +34,17 @@ import wishful.dynamic.jokes
 print(wishful.dynamic.jokes.programming_joke())  # Regenerates!
 print(wishful.dynamic.jokes.programming_joke())  # Regenerates again!
 
-# ✓ ALSO CORRECT: Use wishful.reimport() for explicit control
-import wishful
-jokes = wishful.reimport('wishful.dynamic.jokes')
-print(jokes.programming_joke())  # Fresh generation
-
 # ✗ WRONG: This binds the function once
 from wishful.dynamic.jokes import programming_joke
 print(programming_joke())  # First call works
 print(programming_joke())  # NO regeneration! Same function!
+
+# ✓ ALSO CORRECT: Use wishful.reimport() for explicit control
+import wishful
+from wishful.dynamic.jokes import programming_joke
+print(programming_joke()) 
+wishful.reimport('wishful.dynamic.jokes')
+print(programming_joke())  # Fresh generation
 ```
 
 **Why?** Dynamic modules use `DynamicProxyModule` which wraps callables. Each **function call** on the module triggers `_call_with_runtime()` to regenerate with fresh context. But `from ... import func` binds `func` to your namespace once—no regeneration happens on subsequent calls.

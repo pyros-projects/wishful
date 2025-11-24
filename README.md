@@ -213,7 +213,7 @@ wishful.configure(
 )
 
 # Context radius is configured separately (it likes to be special)
-wishful.set_context_radius(6)  # Lines of context around imports (default: 3)
+wishful.set_context_radius(6)  # Lines of context around imports AND call sites (default: 3)
 ```
 
 **All Configuration Options:**
@@ -246,7 +246,7 @@ All settings can also be configured via environment variables:
 - `WISHFUL_SPINNER` - Set to `"0"` to disable spinner
 - `WISHFUL_MAX_TOKENS` - Maximum tokens (integer)
 - `WISHFUL_TEMPERATURE` - Sampling temperature (float)
-- `WISHFUL_CONTEXT_RADIUS` - Context lines around imports (integer)
+- `WISHFUL_CONTEXT_RADIUS` - Context lines around imports and call sites (integer)
 - `WISHFUL_LOG_LEVEL` - Logging level (DEBUG, INFO, WARNING, ERROR)
 - `WISHFUL_LOG_TO_FILE` - Set to `"0"` to disable file logging
 - `WISHFUL_SYSTEM_PROMPT` - Custom system prompt
