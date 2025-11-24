@@ -5,6 +5,8 @@ description: Teach the LLM your shapes so it returns the right thing.
 
 `@wishful.type` registers schemas that get inlined into the prompt. Works with dataclasses, Pydantic models, and TypedDicts.
 
+_Think of it as teaching the LLM your native language._
+
 ```python
 import wishful
 from dataclasses import dataclass
@@ -41,10 +43,10 @@ class TripPlan(BaseModel):
     vibe: str = Field(description="tone of the itinerary")
 ```
 
-What happens:
+**What happens:**
 
 - Definitions get serialized to Python code and injected into the system prompt.
 - Output bindings are passed to the LLM so it knows which functions must return which type.
-- Docstrings travel too, so you can nudge style (“sound like a pirate”, “Yoda-speak”, etc.).
+- Docstrings travel too, so you can nudge style ("sound like a pirate", "Yoda-speak", etc.). Yes, really.
 
 See `examples/07_typed_outputs.py` and the 30 tests in `tests/test_types.py` for more patterns.

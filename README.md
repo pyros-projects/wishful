@@ -193,6 +193,8 @@ The cache is just regular Python files in `.wishful/`. Want to tweak the generat
 
 ## ⚙️ Configuration: Fine-Tune Your Wishes
 
+_Because even genies need settings._
+
 ```python
 import wishful
 
@@ -210,11 +212,13 @@ wishful.configure(
     system_prompt="Custom prompt", # Override the system prompt for LLM (advanced)
 )
 
-# Context radius is configured separately
+# Context radius is configured separately (it likes to be special)
 wishful.set_context_radius(6)  # Lines of context around imports (default: 3)
 ```
 
 **All Configuration Options:**
+
+_Your wish, your rules._
 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
@@ -254,7 +258,7 @@ All settings can also be configured via environment variables:
 
 Generated code gets AST-scanned to block dangerous patterns: forbidden imports (`os`, `subprocess`, `sys`), `eval()`/`exec()`, unsafe file operations, and system calls.
 
-**Override at your own peril**: `WISHFUL_UNSAFE=1` or `allow_unsafe=True` turns off the guardrails.
+**Override at your own peril**: `WISHFUL_UNSAFE=1` or `allow_unsafe=True` turns off the guardrails. We won't judge. (We totally will.)
 
 ---
 
@@ -270,6 +274,8 @@ python my_tests.py  # No API calls, just predictable stubs
 ---
 
 ## 🔮 How the Magic Actually Works
+
+_Spoiler: it's not actual magic. Or is it?_
 
 1. **Import hook** intercepts `wishful.static.*` and `wishful.dynamic.*` imports
 2. **Cache check**: `static` imports load instantly if cached; `dynamic` always regenerates
@@ -412,7 +418,7 @@ wishful/
 ## 🤔 FAQ (Frequently Asked Wishes)
 
 **Q: Is this production-ready?**  
-A: Define "production." 🙃
+A: Define "production." 🙃 (But seriously: the cache gives you plain Python files you can review, edit, and commit. So... maybe?)
 
 **Q: Can I make the LLM follow a specific style?**  
 A: Yes! Use docstrings in `@wishful.type` decorated classes. Want Yoda-speak? Add `"""Written by master yoda from star wars."""` — the LLM will actually do it.
