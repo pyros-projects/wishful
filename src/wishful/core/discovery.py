@@ -89,6 +89,16 @@ def _alias_targets(aliases: Sequence[ast.alias], fullname: str) -> list[str]:
     ]
 
 
+def _is_plain_import(fullname: str, tree: ast.AST) -> bool:
+    """Return True when the line is an ast.Import of the fullname (not ImportFrom)."""
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            for alias in node.names:
+                if _matches_import(alias.name, fullname):
+                    return True
+    return False
+
+
 def _matches_import_from(module: str | None, fullname: str) -> bool:
     return bool(module) and module.startswith("wishful") and fullname.startswith(module)
 
@@ -98,9 +108,17 @@ def _matches_import(name: str, fullname: str) -> bool:
 
 
 def discover(fullname: str, runtime_context: dict | None = None) -> ImportContext:
-    """Attempt to recover requested symbol names and nearby comments."""
+    """Attempt to recover requested symbol names and nearby comments.
+
+    `runtime_context` is an optional dict (e.g., function name/args) that will
+    be appended to the textual context sent to the LLM for dynamic calls.
+    """
+
+    first_frame: tuple[str, int] | None = None
 
     for filename, lineno in _iter_relevant_frames(fullname):
+        if first_frame is None:
+            first_frame = (filename, lineno)
         code_line = linecache.getline(filename, lineno).strip()
         if not code_line:
             continue
@@ -109,8 +127,15 @@ def discover(fullname: str, runtime_context: dict | None = None) -> ImportContex
         if not functions:
             continue
 
+        tree = _safe_parse_line(code_line)
+        if tree and _is_plain_import(fullname, tree):
+            functions = []
+
         context = _build_context_snippets(filename, lineno, functions)
-        
+
+        if runtime_context:
+            context = _append_runtime_context(context, runtime_context)
+
         # Fetch type information from registry
         type_schemas = get_all_type_schemas()
         function_output_types = {}
@@ -126,7 +151,35 @@ def discover(fullname: str, runtime_context: dict | None = None) -> ImportContex
             function_output_types=function_output_types,
         )
 
-    return ImportContext(functions=[], context=None)
+    # Fallback: even if we couldn't parse requested symbols (e.g., module-level
+    # imports with later attribute access), still capture nearby context so the
+    # LLM gets some hints.
+    if first_frame is not None:
+        filename, lineno = first_frame
+        context = _build_context_snippets(filename, lineno, [])
+    else:
+        context = None
+
+    if runtime_context:
+        context = _append_runtime_context(context, runtime_context)
+
+    type_schemas = get_all_type_schemas()
+    return ImportContext(functions=[], context=context, type_schemas=type_schemas)
+
+
+def _append_runtime_context(context: str | None, runtime_context: dict) -> str:
+    def _safe(val):
+        text = repr(val)
+        return text[:500] + "…" if len(text) > 500 else text
+
+    parts = ["Runtime call context:"]
+    for key, val in runtime_context.items():
+        parts.append(f"- {key}: {_safe(val)}")
+
+    runtime_block = "\n".join(parts)
+    if context:
+        return f"{context}\n\n{runtime_block}"
+    return runtime_block
 
 
 def _iter_relevant_frames(fullname: str) -> Iterable[tuple[str, int]]:

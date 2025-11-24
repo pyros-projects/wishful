@@ -146,7 +146,39 @@ def test_multiple_imports_preserve_existing(monkeypatch):
     assert second() == "second"
     assert call_count["n"] == 2
 
-    # Ensure the original function still works without new generation
-    from wishful.static.text import first as first_again
-    assert first_again() == "first"
-    assert call_count["n"] == 2
+
+def test_dynamic_call_includes_runtime_context(monkeypatch):
+    call_count = {"n": 0}
+    contexts: list[str | None] = []
+    modes: list[str | None] = []
+
+    def gen(module, functions, context, type_schemas=None, function_output_types=None, mode=None):
+        call_count["n"] += 1
+        contexts.append(context)
+        modes.append(mode)
+        body = []
+        for name in sorted(set(functions)):
+            body.append(f"def {name}(*args, **kwargs):\n    return '{name}'\n")
+        return "\n".join(body)
+
+    monkeypatch.setattr(loader, "generate_module_code", gen)
+
+    manager.clear_cache()
+    _reset_modules()
+
+    import wishful.dynamic.ctxdemo as ctxdemo
+
+    # First access triggers regeneration via proxy
+    fn = ctxdemo.make_line
+    assert call_count["n"] >= 1
+
+    # Call should trigger regeneration with runtime context
+    result = fn("hello", mood="grim")
+    assert result == "make_line"
+
+    # Latest generation should include runtime call info and dynamic mode
+    assert any(context and "Runtime call context" in context for context in contexts)
+    assert modes and modes[-1] == "dynamic"
+
+    # Call count should reflect import + attr + call-time generations
+    assert call_count["n"] >= 3

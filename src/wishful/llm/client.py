@@ -31,6 +31,7 @@ def generate_module_code(
     context: str | None,
     type_schemas: dict[str, str] | None = None,
     function_output_types: dict[str, str] | None = None,
+    mode: str | None = None,
 ) -> str:
     """Call the LLM (or fake stub) to generate module source code."""
 
@@ -38,7 +39,7 @@ def generate_module_code(
         return _fake_response(functions)
 
     response = _call_llm(
-        module, functions, context, type_schemas, function_output_types
+        module, functions, context, type_schemas, function_output_types, mode
     )
     content = _extract_content(response)
     return strip_code_fences(content).strip()
@@ -50,9 +51,10 @@ def _call_llm(
     context: str | None,
     type_schemas: dict[str, str] | None = None,
     function_output_types: dict[str, str] | None = None,
+    mode: str | None = None,
 ):
     messages = build_messages(
-        module, functions, context, type_schemas, function_output_types
+        module, functions, context, type_schemas, function_output_types, mode
     )
     try:
         return litellm.completion(

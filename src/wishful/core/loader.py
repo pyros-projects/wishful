@@ -12,6 +12,43 @@ from wishful.safety.validator import SecurityError, validate_code
 from wishful.ui import spinner
 
 
+class DynamicProxyModule(ModuleType):
+    """Module proxy that regenerates the underlying module on each attribute access."""
+
+    _SAFE_ATTRS = {
+        "__class__",
+        "__dict__",
+        "__doc__",
+        "__loader__",
+        "__name__",
+        "__package__",
+        "__path__",
+        "__spec__",
+        "__file__",
+        "__builtins__",
+        "_wishful_loader",
+    }
+
+    def __getattribute__(self, name):
+        if name.startswith("__") or name in DynamicProxyModule._SAFE_ATTRS:
+            return super().__getattribute__(name)
+
+        loader = super().__getattribute__("_wishful_loader")
+        loader._regenerate_for_proxy(self, name)
+
+        attr = super().__getattribute__(name)
+
+        if callable(attr):
+            def _wrapped(*args, **kwargs):
+                return loader._call_with_runtime(self, name, args, kwargs)
+
+            _wrapped.__name__ = name
+            _wrapped.__doc__ = getattr(attr, "__doc__", None)
+            return _wrapped
+
+        return attr
+
+
 class MagicLoader(importlib.abc.Loader):
     """Loader that returns dynamic modules backed by cache + LLM generation.
     
@@ -31,8 +68,15 @@ class MagicLoader(importlib.abc.Loader):
         context = discover(self.fullname)
         source, from_cache = self._load_source(context)
 
+        if self.mode == "dynamic":
+            self._attach_dynamic_proxy(module)
+
         self._exec_source(source, module)
         self._ensure_symbols(module, context, from_cache)
+        if self.mode == "dynamic":
+            self._maybe_review(source)
+            return
+
         self._attach_dynamic_getattr(module)
         self._maybe_review(source)
 
@@ -44,6 +88,7 @@ class MagicLoader(importlib.abc.Loader):
                 context.context,
                 type_schemas=context.type_schemas,
                 function_output_types=context.function_output_types,
+                mode=self.mode,
             )
         # Only write to cache in static mode
         if self.mode == "static":
@@ -55,8 +100,11 @@ class MagicLoader(importlib.abc.Loader):
             validate_code(source, allow_unsafe=settings.allow_unsafe)
         except SecurityError:
             raise
+        preserved_loader = module.__dict__.get("_wishful_loader")
         if clear_first:
             module.__dict__.clear()
+            if preserved_loader is not None:
+                module.__dict__["_wishful_loader"] = preserved_loader
         module.__file__ = str(cache.module_path(self.fullname))
         module.__package__ = self.fullname.rpartition('.')[0]
         exec(compile(source, module.__file__, "exec"), module.__dict__)
@@ -81,9 +129,18 @@ class MagicLoader(importlib.abc.Loader):
 
         setattr(module, "__getattr__", _dynamic_getattr)  # type: ignore[assignment]
 
+    def _attach_dynamic_proxy(self, module: ModuleType) -> None:
+        if not isinstance(module, DynamicProxyModule):
+            module.__class__ = DynamicProxyModule  # type: ignore[misc]
+        setattr(module, "_wishful_loader", self)
+
     @staticmethod
     def _declared_symbols(module: ModuleType) -> set[str]:
-        return {k for k in module.__dict__ if not k.startswith("__")}
+        return {
+            k
+            for k in module.__dict__
+            if not k.startswith("__") and not k.startswith("_wishful_")
+        }
 
     def _load_source(self, context) -> tuple[str, bool]:
         # Dynamic mode: always regenerate, never use cache
@@ -128,6 +185,26 @@ class MagicLoader(importlib.abc.Loader):
         cache.delete_cached(self.fullname)
         source = self._generate_and_cache(desired, context)
         self._exec_source(source, module, clear_first=True)
+
+    def _regenerate_for_proxy(self, module: ModuleType, requested: str) -> None:
+        ctx = discover(self.fullname)
+        desired = set(ctx.functions or []) | {requested} | self._declared_symbols(module)
+        ctx.functions = sorted(desired)
+        source = self._generate_and_cache(ctx.functions, ctx)
+        self._exec_source(source, module, clear_first=True)
+
+    def _call_with_runtime(self, module: ModuleType, func_name: str, args, kwargs):
+        ctx = discover(self.fullname, runtime_context={"function": func_name, "args": args, "kwargs": kwargs})
+        desired = set(ctx.functions or []) | {func_name} | self._declared_symbols(module)
+        ctx.functions = sorted(desired)
+
+        source = self._generate_and_cache(ctx.functions, ctx)
+        self._exec_source(source, module, clear_first=True)
+
+        target = module.__dict__.get(func_name)
+        if callable(target):
+            return target(*args, **kwargs)
+        raise AttributeError(func_name)
 
 
 class MagicPackageLoader(importlib.abc.Loader):

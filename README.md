@@ -173,6 +173,8 @@ from wishful.dynamic.content import generate_story
 
 **Note**: Dynamic imports always regenerate and never use the cache, even if a cached version exists. This ensures fresh, context-aware results every time.
 
+**Proxy tip:** For auto-regeneration on each call, import the dynamic *module*, not individual functions. Example: `import wishful.dynamic.story as story; story.cosmic_horror_next_sentence(...)`. A `from wishful.dynamic.story import cosmic_horror_next_sentence` binds a single function object and won't auto-regen unless you re-import or use `wishful.reimport()`.
+
 ---
 
 ## 🗄️ Cache Ops: Because Sometimes Wishes Need Revising
@@ -188,9 +190,15 @@ wishful.inspect_cache()   # ['.wishful/text.py', '.wishful/dates.py']
 # Regret a wish? Regenerate it
 wishful.regenerate("wishful.static.text")  # Next import re-generates from scratch
 
+# Force a fresh import (useful for dynamic imports in loops)
+story = wishful.reimport('wishful.dynamic.story')
+next_line = story.generate_next_sentence(current_text)
+
 # Nuclear option: forget everything
 wishful.clear_cache()  # Deletes the entire .wishful/ directory
 ```
+
+**Pro tip**: Use `wishful.reimport()` in loops when working with `wishful.dynamic.*` modules to get fresh LLM generation on each iteration without manually managing `sys.modules`.
 
 ### CLI Commands
 
