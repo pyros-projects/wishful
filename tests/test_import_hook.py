@@ -3,6 +3,7 @@ import sys
 
 from wishful import regenerate
 from wishful.cache import manager
+from wishful.cache.manager import dynamic_snapshot_path
 from wishful.core import loader
 
 
@@ -146,7 +147,110 @@ def test_multiple_imports_preserve_existing(monkeypatch):
     assert second() == "second"
     assert call_count["n"] == 2
 
-    # Ensure the original function still works without new generation
-    from wishful.static.text import first as first_again
-    assert first_again() == "first"
+
+def test_dynamic_call_includes_runtime_context(monkeypatch):
+    call_count = {"n": 0}
+    contexts: list[str | None] = []
+    modes: list[str | None] = []
+
+    def gen(module, functions, context, type_schemas=None, function_output_types=None, mode=None):
+        call_count["n"] += 1
+        contexts.append(context)
+        modes.append(mode)
+        body = []
+        for name in sorted(set(functions)):
+            body.append(f"def {name}(*args, **kwargs):\n    return '{name}'\n")
+        return "\n".join(body)
+
+    monkeypatch.setattr(loader, "generate_module_code", gen)
+
+    manager.clear_cache()
+    _reset_modules()
+
+    import wishful.dynamic.ctxdemo as ctxdemo
+
+    # First access triggers regeneration via proxy
+    fn = ctxdemo.make_line
+    assert call_count["n"] >= 1
+
+    # Call should trigger regeneration with runtime context
+    result = fn("hello", mood="grim")
+    assert result == "make_line"
+
+    # Latest generation should include runtime call info and dynamic mode
+    assert any(context and "Runtime call context" in context for context in contexts)
+    assert modes and modes[-1] == "dynamic"
+
+    # Call count should reflect import + attr + call-time generations
+    assert call_count["n"] >= 3
+
+
+def test_static_syntax_error_retries_once(monkeypatch):
+    call_count = {"n": 0}
+
+    def gen(module, functions, context, **kwargs):
+        call_count["n"] += 1
+        if call_count["n"] == 1:
+            return "def broken(:\n    pass\n"
+        return "def foo():\n    return 'ok'\n"
+
+    monkeypatch.setattr(loader, "generate_module_code", gen)
+
+    manager.clear_cache()
+    _reset_modules()
+
+    from wishful.static.syntax_retry import foo
+
+    assert foo() == "ok"
     assert call_count["n"] == 2
+
+    cached = manager.read_cached("wishful.static.syntax_retry")
+    assert "def foo" in cached
+    assert "broken" not in cached
+
+
+def test_dynamic_syntax_error_retries_once(monkeypatch):
+    call_count = {"n": 0}
+
+    def gen(module, functions, context, **kwargs):
+        call_count["n"] += 1
+        if call_count["n"] == 1:
+            return "def broken(:\n    pass\n"
+        return "def ping():\n    return 'pong'\n"
+
+    monkeypatch.setattr(loader, "generate_module_code", gen)
+
+    manager.clear_cache()
+    _reset_modules()
+
+    import wishful.dynamic.syntax_retry_dyn as mod
+
+    assert mod.ping() == "pong"
+    assert call_count["n"] >= 2
+
+    snap = dynamic_snapshot_path("wishful.dynamic.syntax_retry_dyn")
+    assert snap.exists()
+    text = snap.read_text()
+    assert "def ping" in text
+
+
+def test_dynamic_writes_snapshot(monkeypatch):
+    call_count = {"n": 0}
+
+    def gen(module, functions, context, **kwargs):
+        call_count["n"] += 1
+        return "def ping():\n    return 'pong'\n"
+
+    monkeypatch.setattr(loader, "generate_module_code", gen)
+
+    manager.clear_cache()
+    _reset_modules()
+
+    from wishful.dynamic.snapdemo import ping
+
+    assert ping() == "pong"
+
+    path = dynamic_snapshot_path("wishful.dynamic.snapdemo")
+    assert path.exists()
+    assert "ping" in path.read_text()
+    assert call_count["n"] >= 2

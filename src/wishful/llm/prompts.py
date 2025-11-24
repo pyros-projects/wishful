@@ -11,6 +11,7 @@ def build_messages(
     context: str | None,
     type_schemas: dict[str, str] | None = None,
     function_output_types: dict[str, str] | None = None,
+    mode: str | None = None,
 ) -> List[dict]:
     user_parts = [f"Module: {module}"]
 
@@ -42,6 +43,15 @@ def build_messages(
 
     if context:
         user_parts.append("Context:\n" + context.strip())
+
+    if mode == "dynamic":
+        user_parts.append(
+            "Dynamic mode guidance:\n"
+            "- Treat the call-site context as one-off. Return a single, fully baked result.\n"
+            "- Do NOT build strings with templates, f-strings, or .format; write the final prose directly.\n"
+            "- Use contextual values (like settings, style, length hints) naturally in the narrative instead of inserting them verbatim at the start.\n"
+            "- Keep the function signature, but it's fine if the body ignores parameters after using them as creative guidance."
+        )
 
     user_prompt = "\n\n".join(user_parts)
 

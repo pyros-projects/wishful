@@ -26,11 +26,9 @@ def example_static_cached():
     print(f"  Result: {result1}")
     
     print("\nSecond import - uses cache, same result:")
-    # Clear module to re-import
-    import sys
-    sys.modules.pop('wishful.static.greetings', None)
-    from wishful.static.greetings import say_hello as say_hello2
-    result2 = say_hello2("Bob")
+    # Use wishful.reimport() to re-import the module
+    greetings = wishful.reimport('wishful.static.greetings')
+    result2 = greetings.say_hello("Bob")
     print(f"  Result: {result2}")
     print("  (Same function definition, just different input)")
 
@@ -45,21 +43,16 @@ def example_dynamic_runtime():
     print(f"  Result: {idea1}")
     
     print("\nCalling with topic='cooking' (regenerates with new context):")
-    # In dynamic mode, each import can see different runtime context
-    # import sys
-    # sys.modules.pop('wishful.dynamic.ideas', None)
-    from wishful.dynamic.ideas import generate_project_idea as gen2
-    
-    idea2 = gen2(topic="cooking")
+    # Use wishful.reimport() for fresh generation with new context
+    ideas = wishful.reimport('wishful.dynamic.ideas')
+    idea2 = ideas.generate_project_idea(topic="cooking")
     print(f"  Result: {idea2}")
     print("  (LLM sees the actual argument values during generation!)")
 
     print("\nCalling with topic='python ai library':")
-    # In dynamic mode, each import can see different runtime context
-    # import sys
-    # sys.modules.pop('wishful.dynamic.ideas', None)
-    from wishful.dynamic.ideas import generate_project_idea as gen3
-    idea3 = gen3(topic="python ai library")
+    # Each reimport regenerates with fresh context
+    ideas = wishful.reimport('wishful.dynamic.ideas')
+    idea3 = ideas.generate_project_idea(topic="python ai library")
     print(f"  Result: {idea3}")
 
 

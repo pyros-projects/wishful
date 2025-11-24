@@ -59,18 +59,38 @@ def test_dynamic_skips_cache(monkeypatch):
     manager.clear_cache()
     _reset_modules()
 
-    # First import generates
     from wishful.dynamic.nocache import test_func
     result1 = test_func()
-    assert "gen_1" in result1
-    assert call_count["n"] == 1
+    first_calls = call_count["n"]
+    assert first_calls >= 2  # initial import + proxy regen on access
 
-    # Second import regenerates (even though cache exists)
     _reset_modules()
     from wishful.dynamic.nocache import test_func as test_func2
     result2 = test_func2()
-    assert "gen_2" in result2
-    assert call_count["n"] == 2  # Regenerated!
+    assert result1 != result2  # different generation after re-import
+    assert call_count["n"] > first_calls
+
+
+def test_dynamic_proxy_regenerates_on_each_access(monkeypatch):
+    call_count = {"n": 0}
+
+    def fake_generate(module, functions, context, **kwargs):
+        call_count["n"] += 1
+        return "def next_line():\n    return 'gen_" + str(call_count["n"]) + "'\n"
+
+    monkeypatch.setattr(loader, "generate_module_code", fake_generate)
+
+    manager.clear_cache()
+    _reset_modules()
+
+    import wishful.dynamic.proxy_story as proxy_story
+
+    first = proxy_story.next_line()
+    second = proxy_story.next_line()
+
+    # Each call triggers regeneration with runtime context; counts should climb
+    assert first != second
+    assert call_count["n"] >= 4  # import regen + attr access + two call-time regens
 
 
 def test_static_and_dynamic_independent_caches(monkeypatch):

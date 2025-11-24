@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import builtins
 from dataclasses import dataclass, field
 from pathlib import Path
 from textwrap import dedent
@@ -27,6 +28,8 @@ _DEFAULT_SYSTEM_PROMPT = os.getenv(
         """
     ).strip(),
 )
+_DEFAULT_LOG_LEVEL = os.getenv("WISHFUL_LOG_LEVEL", "WARNING").upper()
+_DEFAULT_LOG_TO_FILE = os.getenv("WISHFUL_LOG_TO_FILE", "1") != "0"
 
 
 @dataclass
@@ -46,6 +49,8 @@ class Settings:
     max_tokens: int = int(os.getenv("WISHFUL_MAX_TOKENS", "4096"))
     temperature: float = float(os.getenv("WISHFUL_TEMPERATURE", "1"))
     system_prompt: str = _DEFAULT_SYSTEM_PROMPT
+    log_level: str = _DEFAULT_LOG_LEVEL
+    log_to_file: bool = _DEFAULT_LOG_TO_FILE
 
     def copy(self) -> "Settings":
         return Settings(
@@ -58,10 +63,39 @@ class Settings:
             max_tokens=self.max_tokens,
             temperature=self.temperature,
             system_prompt=self.system_prompt,
+            log_level=self.log_level,
+            log_to_file=self.log_to_file,
         )
 
 
-settings = Settings()
+# Persist the settings object across module reloads (tests deliberately purge
+# wishful.* modules). Stash it on `builtins` so all imports share the same
+# instance even after sys.modules churn.
+if getattr(builtins, "_wishful_settings", None) is None:
+    builtins._wishful_settings = Settings()
+settings = builtins._wishful_settings  # type: ignore[attr-defined]
+
+
+# Internal helper to load logging module robustly (handles altered sys.modules)
+def _load_logging_module():
+    try:
+        from wishful import logging as logging_mod  # type: ignore
+        return logging_mod
+    except Exception:
+        pass
+    try:
+        import importlib.util
+        import sys
+        path = Path(__file__).parent / "logging.py"
+        spec = importlib.util.spec_from_file_location("wishful.logging", path)
+        if spec and spec.loader:
+            logging_mod = importlib.util.module_from_spec(spec)
+            sys.modules["wishful.logging"] = logging_mod
+            spec.loader.exec_module(logging_mod)  # type: ignore[arg-type]
+            return logging_mod
+    except Exception:
+        return None
+    return None
 
 
 def configure(
@@ -75,6 +109,8 @@ def configure(
     temperature: Optional[float] = None,
     max_tokens: Optional[int] = None,
     system_prompt: Optional[str] = None,
+    log_level: Optional[str] = None,
+    log_to_file: Optional[bool] = None,
 ) -> None:
     """Update global settings in-place.
 
@@ -92,11 +128,29 @@ def configure(
         "temperature": temperature,
         "max_tokens": max_tokens,
         "system_prompt": system_prompt,
+        "log_level": log_level.upper() if isinstance(log_level, str) else log_level,
+        "log_to_file": log_to_file,
     }
+
+    # If debug explicitly enabled, default to DEBUG level and file logging unless
+    # caller provided overrides.
+    if debug is True:
+        if updates["log_level"] is None:
+            updates["log_level"] = "DEBUG"
+        if updates["log_to_file"] is None:
+            updates["log_to_file"] = True
+        # Spinners and heavy debug output don't mix nicely
+        if updates["spinner"] is None:
+            updates["spinner"] = False
 
     for attr, value in updates.items():
         if value is not None:
             setattr(settings, attr, value)
+
+    # Reconfigure logging after updates (lazy import to avoid cycles during init)
+    logging_mod = _load_logging_module()
+    if logging_mod:
+        logging_mod.configure_logging(force=True)
 
 
 def reset_defaults() -> None:
@@ -113,3 +167,9 @@ def reset_defaults() -> None:
     settings.max_tokens = defaults.max_tokens
     settings.temperature = defaults.temperature
     settings.system_prompt = defaults.system_prompt
+    settings.log_level = defaults.log_level
+    settings.log_to_file = defaults.log_to_file
+
+    logging_mod = _load_logging_module()
+    if logging_mod:
+        logging_mod.configure_logging(force=True)

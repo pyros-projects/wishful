@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import importlib.abc
 import importlib.util
+import sys
 from pathlib import Path
 
 from wishful.core.loader import MagicLoader, MagicPackageLoader
@@ -25,7 +26,8 @@ class MagicFinder(importlib.abc.MetaPathFinder):
 
         # Handle root namespace packages
         if fullname == MAGIC_NAMESPACE:
-            return importlib.util.spec_from_loader(fullname, MagicPackageLoader(), is_package=True)
+            # Let the real installed package handle the root 'wishful'
+            return None
         if fullname == STATIC_NAMESPACE:
             return importlib.util.spec_from_loader(fullname, MagicPackageLoader(), is_package=True)
         if fullname == DYNAMIC_NAMESPACE:
@@ -66,7 +68,10 @@ def _is_internal_module(fullname: str) -> bool:
 def install() -> None:
     """Register the finder if it is not already present."""
 
-    for finder in list(__import__("sys").meta_path):  # type: ignore
-        if isinstance(finder, MagicFinder):
+    for finder in sys.meta_path:
+        if finder.__class__.__name__ == "MagicFinder" and finder.__class__.__module__.endswith(
+            "wishful.core.finder"
+        ):
             return
-    __import__("sys").meta_path.insert(0, MagicFinder())
+
+    sys.meta_path.insert(0, MagicFinder())

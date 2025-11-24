@@ -1,13 +1,22 @@
-# wishful 🪄
 
-[![PyPI version](https://badge.fury.io/py/wishful.svg)](https://badge.fury.io/py/wishful)
-[![Python 3.12+](https://img.shields.io/badge/python-3.12+-blue.svg)](https://www.python.org/downloads/)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![Tests](https://img.shields.io/badge/tests-83%20passed-brightgreen.svg)](https://github.com/pyros-projects/wishful)
-[![Coverage](https://img.shields.io/badge/coverage-80%25-green.svg)](https://github.com/pyros-projects/wishful)
-[![Code style: ruff](https://img.shields.io/badge/code%20style-ruff-000000.svg)](https://github.com/astral-sh/ruff)
 
-> _"Code so good, you'd think it was wishful thinking"_
+<p align="center">
+  <img alt="Wishful Banner" src="docs-site/src/content/imgs/wishful_logo (5).jpg" width="800">
+</p>
+
+<p align="center">
+  <a href="https://badge.fury.io/py/wishful"><img src="https://badge.fury.io/py/wishful.svg" alt="PyPI version"></a>
+  <a href="https://www.python.org/downloads/"><img src="https://img.shields.io/badge/python-3.12+-blue.svg" alt="Python 3.12+"></a>
+  <a href="https://opensource.org/licenses/MIT"><img src="https://img.shields.io/badge/License-MIT-yellow.svg" alt="License: MIT"></a>
+  <a href="https://github.com/pyros-projects/wishful"><img src="https://img.shields.io/badge/tests-83%20passed-brightgreen.svg" alt="Tests"></a>
+  <a href="https://github.com/pyros-projects/wishful"><img src="https://img.shields.io/badge/coverage-80%25-green.svg" alt="Coverage"></a>
+  <a href="https://github.com/astral-sh/ruff"><img src="https://img.shields.io/badge/code%20style-ruff-000000.svg" alt="Code style: ruff"></a>
+</p>
+
+<p align="center">
+  <em>"Import your wildest dreams"</em>
+</p>
+
 
 Stop writing boilerplate. Start wishing for it instead.
 
@@ -23,30 +32,12 @@ Think of it as **wishful thinking, but for imports**. The kind that actually wor
 pip install wishful
 ```
 
-**2. Set your credentials** (litellm reads the usual suspects)
-
-Export them or toss them in a `.env` file:
-
+**2. Set your API key** (any provider supported by [litellm](https://docs.litellm.ai/))
 
 ```bash
-export OPENAI_API_KEY=... 
-export DEFAULT_MODEL=azure/gpt-4.1
-``
-
-or
-
-```bash
-export AZURE_API_KEY=...
-export AZURE_API_BASE=https://<your-endpoint>.openai.azure.com/
-export AZURE_API_VERSION=2025-04-01-preview
-export DEFAULT_MODEL=azure/gpt-4.1
+export OPENAI_API_KEY=your_key_here
+# or AZURE_API_KEY, ANTHROPIC_API_KEY, etc.
 ```
-
-or any provider else supported by litellm
-
-
-
-
 
 **3. Import your wildest fantasies**
 
@@ -66,13 +57,13 @@ print(to_yyyy_mm_dd("31.12.2025"))  # '2025-12-31'
 
 It's like having a junior dev who never sleeps and always delivers exactly what you asked for (well, _almost_ always).
 
-> **Note**: Use `wishful.static.*` for cached imports (recommended) or `wishful.dynamic.*` for runtime-aware regeneration on every import. See [Static vs Dynamic](#-static-vs-dynamic-when-to-use-which) below.
+> 💡 **Pro tip**: Use `wishful.static.*` for cached imports (recommended) or `wishful.dynamic.*` for runtime-aware regeneration. See [Static vs Dynamic](#-static-vs-dynamic-when-to-use-which) below.
 
 ---
 
 ## 🎯 Wishful Guidance: Help the AI Read Your Mind
 
-Want better results? Drop hints. Literal comments. wishful reads the code _around_ your import and forwards that context to the LLM.
+Want better results? Drop hints. Literal comments. wishful reads the code _around_ your import and forwards that context to the LLM. It's like pair programming, but your partner is a disembodied intelligence with questionable opinions about semicolons.
 
 ```python
 # desired: parse standard nginx combined logs into list of dicts
@@ -80,8 +71,6 @@ from wishful.static.logs import parse_nginx_logs
 
 records = parse_nginx_logs(Path("/var/log/nginx/access.log").read_text())
 ```
-
-The AI sees your comment and knows _exactly_ what you're after. It's like pair programming, but your partner is a disembodied intelligence with questionable opinions about semicolons.
 
 ---
 
@@ -163,7 +152,10 @@ from wishful.static.text import extract_emails
 ### `wishful.dynamic.*` — Runtime-Aware & Fresh
 
 ```python
-from wishful.dynamic.content import generate_story
+# when importing as dynamic module all bets are off
+import wishful.dynamic.content as magical_content
+
+my_intro = magical_content.create_a_cosmic_horrorstory_intro()
 ```
 
 - 🔄 **Regenerates**: Fresh LLM call on every import
@@ -177,35 +169,23 @@ from wishful.dynamic.content import generate_story
 
 ## 🗄️ Cache Ops: Because Sometimes Wishes Need Revising
 
-### Python API
-
 ```python
 import wishful
 
 # See what you've wished for
 wishful.inspect_cache()   # ['.wishful/text.py', '.wishful/dates.py']
 
-# Regret a wish? Regenerate it
-wishful.regenerate("wishful.static.text")  # Next import re-generates from scratch
+# Regenerate a module
+wishful.regenerate("wishful.static.text")
+
+# Force fresh import (useful for dynamic imports in loops)
+story = wishful.reimport('wishful.dynamic.story')
 
 # Nuclear option: forget everything
-wishful.clear_cache()  # Deletes the entire .wishful/ directory
+wishful.clear_cache()
 ```
 
-### CLI Commands
-
-wishful comes with a command-line interface for managing your cache:
-
-```bash
-# View all cached modules
-wishful inspect
-
-# Clear the entire cache
-wishful clear
-
-# Regenerate a specific module
-wishful regen wishful.static.text
-```
+**CLI**: `wishful inspect`, `wishful clear`, `wishful regen <module>`
 
 The cache is just regular Python files in `.wishful/`. Want to tweak the generated code? Edit it directly. It's your wish, after all.
 
@@ -220,39 +200,19 @@ wishful.configure(
     model="gpt-4o-mini",        # Switch models like changing channels
     cache_dir="/tmp/.wishful",  # Hide your wishes somewhere else
     spinner=False,              # Silence the "generating..." spinner
-    review=True,                # Paranoid? Review code before it runs
-    context_radius=6,           # Lines of context around imports/calls (default: 3)
-    allow_unsafe=False,         # Keep the safety rails ON (recommended)
+    review=True,                # Review code before it runs
+    context_radius=6,           # Lines of context (default: 3)
+    allow_unsafe=False,         # Keep safety rails ON (recommended)
 )
 ```
 
-### Environment Variables (for the env-obsessed)
-
-Set these in your shell or `.env` file:
-
-- `WISHFUL_MODEL` / `DEFAULT_MODEL` — which AI overlord to summon
-- `WISHFUL_CACHE_DIR` — where to stash generated wishes (default: `.wishful`)
-- `WISHFUL_REVIEW` — set to `1` to manually approve every wish (trust issues?)
-- `WISHFUL_DEBUG` — verbose logging for when things go sideways
-- `WISHFUL_UNSAFE` — set to `1` to disable safety checks (⚠️ danger zone)
-- `WISHFUL_SPINNER` — set to `0` to disable the fancy spinner
-- `WISHFUL_MAX_TOKENS` — cap the LLM's verbosity (default: 800)
-- `WISHFUL_TEMPERATURE` — creativity dial (default: 0 = boring but safe)
-- `WISHFUL_CONTEXT_RADIUS` — how many surrounding lines to capture for context (default: 3). Also applied to call sites of requested symbols.
-
-Context harvesting
-- wishful forwards code/comments around the import line **and** around call sites of the requested symbols. The number of lines captured on each side is controlled by `wishful.set_context_radius(n)` or `WISHFUL_CONTEXT_RADIUS`.
+**Environment variables**: `WISHFUL_MODEL`, `WISHFUL_CACHE_DIR`, `WISHFUL_REVIEW`, `WISHFUL_DEBUG`, `WISHFUL_UNSAFE`, `WISHFUL_SPINNER`, `WISHFUL_MAX_TOKENS`, `WISHFUL_TEMPERATURE`, `WISHFUL_CONTEXT_RADIUS`
 
 ---
 
 ## 🛡️ Safety Rails: Wishful Isn't _That_ Reckless
 
-Generated code gets AST-scanned to block obviously dangerous patterns:
-
-- ❌ Imports like `os`, `subprocess`, `sys`
-- ❌ Calls to `eval()` or `exec()`
-- ❌ `open()` in write/append mode
-- ❌ Shenanigans like `os.system()` or `subprocess.call()`
+Generated code gets AST-scanned to block dangerous patterns: forbidden imports (`os`, `subprocess`, `sys`), `eval()`/`exec()`, unsafe file operations, and system calls.
 
 **Override at your own peril**: `WISHFUL_UNSAFE=1` or `allow_unsafe=True` turns off the guardrails.
 
@@ -260,9 +220,7 @@ Generated code gets AST-scanned to block obviously dangerous patterns:
 
 ## 🧪 Testing: Wishes Without Consequences
 
-Need deterministic, offline behavior? Set `WISHFUL_FAKE_LLM=1` and wishful will generate placeholder stub functions instead of hitting the network.
-
-Perfect for CI, unit tests, or when your Wi-Fi is acting up.
+Need deterministic, offline behavior? Set `WISHFUL_FAKE_LLM=1` and wishful generates placeholder stubs instead of hitting the network. Perfect for CI, unit tests, or when your Wi-Fi is acting up.
 
 ```bash
 export WISHFUL_FAKE_LLM=1
@@ -273,15 +231,13 @@ python my_tests.py  # No API calls, just predictable stubs
 
 ## 🔮 How the Magic Actually Works
 
-Here's the 30-second version:
-
-1. **Import hook**: wishful installs a `MagicFinder` on `sys.meta_path` that intercepts `wishful.static.*` and `wishful.dynamic.*` imports.
-2. **Cache check**: For `static` imports, if `.wishful/<module>.py` exists, it loads instantly. `dynamic` imports always regenerate.
-3. **Context discovery**: wishful captures nearby comments, code, and registered type schemas to send to the LLM.
-4. **LLM generation**: The LLM (via `litellm`) generates code based on your import, context, and type definitions.
-5. **Validation**: The generated code is AST-parsed and safety-checked (unless you disabled that like a madman).
-6. **Execution**: Code is written to `.wishful/`, compiled, and executed as the import result.
-7. **Transparency**: The cache is just plain Python files. Edit them. Commit them. They're yours.
+1. **Import hook** intercepts `wishful.static.*` and `wishful.dynamic.*` imports
+2. **Cache check**: `static` imports load instantly if cached; `dynamic` always regenerates
+3. **Context discovery**: Captures nearby comments, code, and registered type schemas
+4. **LLM generation**: Generates code via `litellm` based on your import + context
+5. **Safety validation**: AST-parsed and checked for dangerous patterns
+6. **Execution**: Code is cached to `.wishful/`, compiled, and executed
+7. **Transparency**: Just plain Python files. Edit them. Commit them. They're yours.
 
 It's import hooks meets LLMs meets type-aware code generation meets "why didn't this exist already?"
 
@@ -290,7 +246,8 @@ It's import hooks meets LLMs meets type-aware code generation meets "why didn't 
 ## 🎭 Fun with Wishful Thinking
 
 ```python
-# Need some cosatic.story import cosmic_horror_intro
+# Cosmic horror stories? Just import it.
+from wishful.static.story import cosmic_horror_intro
 
 intro = cosmic_horror_intro(
     setting="a deserted amusement park",
@@ -302,7 +259,7 @@ print(intro)  # 🎢👻
 from wishful.static.numbers import primes_from_to, sum_list
 
 total = sum_list(list=primes_from_to(1, 100))
-print(total)  # 1060 (probably)
+print(total)  # 1060
 
 # Because who has time to write date parsers?
 from wishful.static.dates import parse_fuzzy_date
@@ -313,7 +270,6 @@ print(parse_fuzzy_date("next Tuesday"))  # Your guess is as good as mine
 from wishful.dynamic.jokes import programming_joke
 
 print(programming_joke())  # New joke on every import 🎲
-print(parse_fuzzy_date("next Tuesday"))  # Your guess is as good as mine
 ```
 
 ---
@@ -408,7 +364,6 @@ A: Yes! Use docstrings in `@wishful.type` decorated classes. Want Yoda-speak? Ad
 **Q: Do type hints and Pydantic constraints actually work?**  
 A: Surprisingly, yes! Field constraints like `min_length=10` or `gt=0` are serialized and sent to the LLM, which respects them.
 
-
 **Q: What if the LLM generates bad code?**  
 A: That's what the cache is for. Check `.wishful/`, tweak it, commit it, and it's locked in.
 
@@ -425,8 +380,8 @@ A: It's not lazy. It's _efficient wishful thinking_. 😎
 
 ## 📜 License
 
-MIT. Wish responsibly.
+MIT. 
 
-**Go forth and wish.** ✨
+**Go forth and wish responsibly.** ✨
 
 Your imports will never be the same.

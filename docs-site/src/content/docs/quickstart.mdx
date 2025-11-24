@@ -1,0 +1,72 @@
+---
+title: Quickstart
+description: From “pip install” to your first cached wish.
+---
+
+## 1) Install wishful
+
+Add wishful to your project like any other library:
+
+```bash
+pip install wishful
+```
+
+wishful targets Python 3.12+. It uses [`litellm`](https://github.com/BerriAI/litellm),
+so any provider it supports will work here too.
+
+## 2) Point it at an LLM
+
+Configure your provider with the usual environment variables. For example, with OpenAI:
+
+```bash
+export OPENAI_API_KEY=...
+export DEFAULT_MODEL=gpt-4.1
+```
+
+Or with Azure OpenAI:
+
+```bash
+export AZURE_API_KEY=...
+export AZURE_API_BASE=https://<your-endpoint>.openai.azure.com/
+export AZURE_API_VERSION=2025-04-01-preview
+export DEFAULT_MODEL=azure/gpt-4.1
+```
+
+You can also set `WISHFUL_MODEL` instead of `DEFAULT_MODEL` if you prefer.
+
+## 3) Your first wish
+
+Drop this into a scratch file or a REPL:
+
+```python
+from wishful.static.text import extract_emails
+
+raw = "Contact us at team@example.com or sales@demo.dev"
+print(extract_emails(raw))
+```
+
+Run it once.
+
+If you open the new `.wishful/text.py` file, you&apos;ll see real Python code that wishful
+generated, validated and cached for you.
+
+**A‑ha moment:** the function you imported didn&apos;t exist anywhere in your repo — the import
+itself was the spec.
+
+## 4) Optional: fake LLM mode
+
+For CI, demos, or offline experiments, flip on stubbed generation:
+
+```bash
+export WISHFUL_FAKE_LLM=1
+python your_script.py
+```
+
+In fake mode, wishful returns deterministic stub implementations instead of
+calling a real model. The test suite uses this mode; your project can too.
+
+## 5) Next steps
+
+- Curious about the magic under the hood? Read [How it works](/how-it-works).
+- Want the type registry and Yoda-speak examples? Head to [Types](/types).
+- Hacking on wishful itself? See [Contributing](/contributing) for the `uv`‑powered dev loop.

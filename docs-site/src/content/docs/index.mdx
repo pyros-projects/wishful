@@ -1,0 +1,93 @@
+---
+title: Welcome
+description: LLM imports that feel like a magic trick.
+---
+
+import { Code } from 'astro:components';
+
+<section className="hero hero-grid">
+  <div className="hero-main">
+    <div className="hero-copy-kicker">
+      <span /> JIT codegen, import-shaped
+    </div>
+    <h1 className="hero-title">Write the import you wish existed.</h1>
+
+    <div className="hero-code">
+      <Code
+        code={`from wishful.static.text import extract_emails
+
+raw = "Contact us at team@example.com or sales@demo.dev"
+emails = extract_emails(raw)
+print(emails) # prints ["team@example.com","sales@demo.dev"] probably...`}
+        lang="python"
+      />
+      <div className="hero-code-footer">
+        <span><strong>First run:</strong> wishful asks the LLM, validates the code, and caches it under <code>.wishful/text.py</code>.</span>
+        <span><strong>Later runs:</strong> just a normal Python import — no latency, no API call.</span>
+      </div>
+    </div>
+
+    <p className="hero-subtitle">
+      <code>import wishful</code> turns “someone should really write this
+      helper” into cached, type-aware Python modules — with safety checks,
+      offline-friendly stubs, and a dash of mischief.
+    </p>
+
+    <div className="hero-pill-row">
+      <div className="hero-pill">LLM-generated modules with real files on disk</div>
+      <div className="hero-pill">Static (cached) and dynamic (runtime-aware) imports</div>
+      <div className="hero-pill">Type- and context-aware prompts</div>
+    </div>
+
+    <p className="hero-footnote">
+      Prefer reading code? Start with the{' '}
+      <a href="https://github.com/pyros-projects/wishful">README</a> and come
+      back here for the deeper “how it works” tour.
+    </p>
+  </div>
+</section>
+
+## Moments that make this “click”
+
+<div className="aha-grid">
+  <div className="aha-card">
+    <h4>Imports as intent</h4>
+    <p>
+      You describe the behavior in comments, write the import you wish you had,
+      and let the model do the boring glue work.
+    </p>
+  </div>
+  <div className="aha-card">
+    <h4>Real files you can edit</h4>
+    <p>
+      Generated modules land in <code>.wishful/</code> as plain <code>.py</code> files.
+      If the LLM gets close-but-not-perfect, tweak it once and you&apos;re done.
+    </p>
+  </div>
+  <div className="aha-card">
+    <h4>Types that steer the model</h4>
+    <p>
+      Register dataclasses, Pydantic models, or TypedDicts with <code>@wishful.type</code>
+      so the generated code returns exactly the shapes you expect.
+    </p>
+  </div>
+  <div className="aha-card">
+    <h4>Context-aware by default</h4>
+    <p>
+      wishful forwards nearby comments and call sites into the prompt, so
+      “parse nginx logs into dicts” actually does what it says on the tin.
+    </p>
+  </div>
+</div>
+
+### What lives where?
+
+- **Quickstart** — pip install, your first wish, and fake-LLM mode.
+- **How it works** — the import hook, cache layout, static vs dynamic.
+- **Configuration & CLI** — knobs you can turn from code or env vars.
+- **Types** — using <code>@wishful.type</code> to nudge the model.
+- **Advanced context discovery** — how wishful harvests hints from your code.
+- **Contributing** — how to hack on the project (with uv and good vibes).
+
+If you&apos;re here to just try it, hop to [Quickstart](/quickstart).  
+If you want the internals, continue with [How it works](/how-it-works).

@@ -12,7 +12,7 @@ def reset_wishful(tmp_path):
         cache_dir=tmp_path / ".wishful",
         spinner=False,
         review=False,
-        debug=False,
+        debug=True,
         allow_unsafe=True,
     )
     clear_cache()
@@ -20,6 +20,6 @@ def reset_wishful(tmp_path):
     clear_cache()
     reset_defaults()
     for name in list(sys.modules):
-        if name.startswith("wishful."):
+        if name.startswith("wishful.static") or name.startswith("wishful.dynamic"):
             sys.modules.pop(name, None)
-    sys.modules.pop("wishful", None)
+    #sys.modules.pop("wishful", None)

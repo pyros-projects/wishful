@@ -22,6 +22,7 @@ __all__ = [
     "clear_cache",
     "inspect_cache",
     "regenerate",
+    "reimport",
     "set_context_radius",
     "settings",
     "reset_defaults",
@@ -38,10 +39,11 @@ def clear_cache() -> None:
     """Delete all generated files from the cache directory."""
 
     cache.clear_cache()
-    # Remove any loaded wishful modules so they regenerate on next import.
+    # Remove generated namespaces so they regenerate on next import.
     for name in list(sys.modules):
-        if name.startswith("wishful."):
+        if name.startswith("wishful.static") or name.startswith("wishful.dynamic"):
             sys.modules.pop(name, None)
+    # Keep root wishful module to retain settings/logging; re-importer can handle children.
 
 
 def inspect_cache() -> List[str]:
@@ -69,6 +71,29 @@ def regenerate(module_name: str) -> None:
 def set_context_radius(radius: int) -> None:
     """Adjust how many surrounding lines are sent as context to the LLM."""
     _set_context_radius(radius)
+
+
+def reimport(module_path: str):
+    """Force a fresh import by clearing the module from cache.
+    
+    This is especially useful for wishful.dynamic.* imports in loops,
+    where you want the LLM to regenerate with fresh context on each iteration.
+    
+    Args:
+        module_path: The full module path (e.g., 'wishful.dynamic.story')
+    
+    Returns:
+        The freshly imported module
+    
+    Example:
+        >>> story = wishful.reimport('wishful.dynamic.story')
+        >>> next_line = story.cosmic_horror_next_sentence(current_text)
+    """
+    # Clear from Python's module cache
+    sys.modules.pop(module_path, None)
+    
+    # Import fresh (this triggers wishful's import hook if it's a wishful.* module)
+    return importlib.import_module(module_path)
 
 
 __version__ = "0.1.0"

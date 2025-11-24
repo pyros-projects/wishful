@@ -1,0 +1,261 @@
+:root {
+  --sl-color-accent-high: #f97316;
+  --sl-color-accent: #fb923c;
+  --sl-color-accent-low: rgba(251, 146, 60, 0.08);
+  --sl-color-bg: #020617;
+  --sl-color-surface: #020617;
+  --sl-color-text: #e5e7eb;
+  --sl-color-text-soft: #cbd5e1;
+  --sl-color-text-accent: #f97316;
+  --sl-color-border: rgba(148, 163, 184, 0.35);
+  --sl-color-bg-nav: rgba(15, 23, 42, 0.98);
+  --sl-color-bg-sidebar: #020617;
+  --sl-color-bg-inline-code: rgba(15, 23, 42, 0.9);
+  --sl-color-hairline: rgba(15, 23, 42, 0.9);
+
+  --wishful-hero-border: rgba(148, 163, 184, 0.45);
+  --wishful-hero-shadow: 0 26px 80px rgba(15, 23, 42, 0.95);
+  --wishful-card-border: rgba(148, 163, 184, 0.35);
+
+  /* Let the content column breathe a bit more on large screens */
+  --sl-content-width: 72rem;
+}
+
+:root[data-theme='light'] {
+  --sl-color-bg: #fff7ed;
+  --sl-color-surface: #fffaf5;
+  --sl-color-text: #0f172a;
+  --sl-color-text-soft: #334155;
+  --sl-color-border: #fed7aa;
+  --sl-color-bg-nav: #fff7ed;
+  --sl-color-bg-sidebar: #fff7ed;
+  --sl-color-bg-inline-code: #ffedd5;
+  --sl-color-hairline: #fed7aa;
+
+  --wishful-hero-border: rgba(248, 250, 252, 0.7);
+  --wishful-hero-shadow: 0 18px 60px rgba(15, 23, 42, 0.18);
+  --wishful-card-border: rgba(148, 163, 184, 0.25);
+}
+
+.hero {
+  background:
+    radial-gradient(120% 160% at 0% 0%, rgba(251, 146, 60, 0.28), transparent),
+    radial-gradient(80% 120% at 100% 0%, rgba(56, 189, 248, 0.24), transparent),
+    radial-gradient(90% 120% at 50% 100%, #020617, #020617);
+}
+
+.hero-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 2.5rem;
+  padding: 3rem 2.5rem;
+  border-radius: 1.5rem;
+  border: 1px solid var(--wishful-hero-border);
+  box-shadow: var(--wishful-hero-shadow);
+  position: relative;
+  overflow: hidden;
+  align-items: stretch;
+}
+
+.hero-grid::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  border-radius: inherit;
+  border: 1px solid rgba(252, 211, 77, 0.15);
+  mix-blend-mode: screen;
+}
+
+.hero-copy-kicker {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.2rem 0.8rem;
+  border-radius: 999px;
+  border: 1px solid rgba(248, 250, 252, 0.18);
+  background: rgba(15, 23, 42, 0.7);
+  font-size: 0.8rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.hero-copy-kicker span {
+  display: inline-flex;
+  width: 0.4rem;
+  height: 0.4rem;
+  border-radius: 999px;
+  background: radial-gradient(circle at 30% 30%, #fed7aa, #f97316);
+}
+
+.hero-title {
+  font-size: clamp(2.3rem, 3vw, 2.9rem);
+  letter-spacing: -0.04em;
+  margin-block: 1rem 0.4rem;
+}
+
+.hero-subtitle {
+  max-width: 34rem;
+  color: var(--sl-color-text-soft);
+  font-size: 0.98rem;
+}
+
+.hero-pill-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-block: 1.4rem 0;
+  align-items: center;
+}
+
+.hero-pill-row > * {
+  margin: 0; /* neutralize markdown sibling margins so gap controls spacing */
+}
+
+.hero-pill {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.35rem 0.9rem;
+  border-radius: 999px;
+  border: 1px solid rgba(148, 163, 184, 0.6);
+  background: radial-gradient(circle at 0 0, rgba(251, 146, 60, 0.22), transparent),
+    rgba(15, 23, 42, 0.9);
+  font-size: 0.8rem;
+}
+
+.hero-footnote {
+  margin-top: 1.2rem;
+  font-size: 0.85rem;
+  color: var(--sl-color-text-soft);
+}
+
+.hero-footnote code {
+  padding: 0.1rem 0.4rem;
+  border-radius: 999px;
+  background: rgba(15, 23, 42, 0.9);
+}
+
+.hero-code {
+  position: relative;
+  margin-top: 1.6rem;
+  padding: 1.1rem 1.3rem 1rem;
+  border-radius: 1.1rem;
+  border: 1px solid rgba(15, 23, 42, 0.9);
+  background: radial-gradient(circle at 0% 0%, rgba(15, 23, 42, 0.8), #020617);
+  box-shadow: 0 18px 60px rgba(15, 23, 42, 0.95);
+  font-family: var(--sl-font-mono, ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace);
+  font-size: 0.9rem;
+}
+
+.hero-code::before {
+  content: "python · your first wish";
+  position: absolute;
+  inset-inline: 0.9rem auto;
+  top: 0.8rem;
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: rgba(148, 163, 184, 0.95);
+}
+
+.hero-code pre {
+  margin: 1.4rem 0 0 !important;
+}
+
+.hero-code-footer {
+  margin-top: 0.8rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  font-size: 0.78rem;
+  color: rgba(148, 163, 184, 0.9);
+}
+
+.hero-code-footer strong {
+  color: #f97316;
+}
+
+.aha-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 1.25rem;
+  margin-block: 2rem 0.5rem;
+  max-width: 72rem;
+  margin-inline: auto;
+  align-items: start;
+}
+
+.aha-grid > * {
+  margin: 0; /* keep cards level; gaps handle spacing */
+}
+
+.aha-card {
+  padding: 1rem 1.1rem;
+  border-radius: 0.9rem;
+  border: 1px solid var(--wishful-card-border);
+  background: radial-gradient(circle at 0 0, rgba(248, 250, 252, 0.06), transparent),
+    rgba(15, 23, 42, 0.86);
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+:root[data-theme='light'] .aha-card {
+  background: radial-gradient(circle at 0 0, #fff7ed, transparent), #fffaf5;
+}
+
+.aha-card h4 {
+  margin-top: 0;
+  margin-bottom: 0.25rem;
+  font-size: 0.95rem;
+}
+
+.aha-card p {
+  margin: 0;
+  font-size: 0.85rem;
+  color: var(--sl-color-text-soft);
+  flex: 1;
+}
+
+.aha-card p:empty {
+  display: none;
+}
+
+.sl-markdown code {
+  font-size: 0.95em;
+  border-radius: 999px;
+  padding: 0.05rem 0.45rem;
+  background: var(--sl-color-bg-inline-code);
+  border: 1px solid rgba(15, 23, 42, 0.9);
+}
+
+.sl-markdown pre code {
+  border-radius: 0.75rem;
+  padding: 1rem;
+  border: 1px solid rgba(15, 23, 42, 0.9);
+}
+
+/* Widen the main content panel between sidebar and ToC */
+main .content-panel {
+  max-width: min(72rem, 100%);
+  margin-inline: auto;
+  padding-inline: clamp(1rem, 3vw, 2.75rem);
+}
+
+/* Ensure active sidebar item is legible on the accent background */
+nav[aria-label='Main'] a[aria-current='page'] {
+  color: #020617 !important;
+  font-weight: 600;
+}
+
+@media (max-width: 900px) {
+  .hero-grid {
+    grid-template-columns: minmax(0, 1fr);
+    padding: 2.2rem 1.6rem;
+  }
+
+  .hero-code-footer {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+}

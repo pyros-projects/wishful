@@ -1,0 +1,133 @@
+---
+title: Advanced context discovery
+description: Brainstorming ways to feed better hints to the LLM.
+---
+
+This is a port of the ideas doc from `docs/ideas/advanced_context_discovery.md`.
+
+## Current state
+
+`discovery.py` uses stack inspection + `linecache` to:
+- Extract function names from import statements via AST parsing
+- Grab ±3 lines around the import for comment context
+- Forward this to the LLM as hints
+
+**Limitations:**
+- Fixed 3-line radius misses broader context
+- Only captures raw text comments, not semantic information
+- No awareness of type hints, docstrings, or surrounding code structure
+- Single discovery strategy (comment-based)
+
+---
+
+## Configurable context radius
+
+Allow users to tune the context window size via config or environment variables.
+
+```python
+wishful.configure(context_radius=5)  # Grab ±5 lines instead of ±3
+# or
+export WISHFUL_CONTEXT_RADIUS=10
+```
+
+**Benefits:**
+- Users with detailed multi-line comments get full context
+- Tighter radius for minimal noise in dense files
+
+**Implementation:**
+- Add `context_radius: int = 3` to `Settings` in `config.py`
+- Pass to `_gather_context_lines()` in `discovery.py`
+- Document that larger radius = more LLM tokens consumed
+
+**Gotchas:**
+- Very large radius might include unrelated imports or code
+- Need to balance signal vs. noise
+
+---
+
+## Type hint extraction
+
+Parse type hints from the import statement and surrounding code to give the LLM richer semantic information.
+
+Examples:
+
+```python
+from wishful.utils import parse_date
+result: datetime = parse_date("2025-01-01")  # Infer return type is datetime
+```
+
+Approaches:
+- Parse usage context (assignments with annotations).
+- Scan for nearby type aliases.
+- Extract from docstrings near the import.
+
+---
+
+## Multi-strategy discovery
+
+Support multiple context discovery algorithms and let users choose or combine them.
+
+Strategy options:
+- **Comment-Based** (current default)
+- **Scope-Aware**: capture the function/class scope containing the import
+- **Module-Level Docstring**
+- **Proximity-Based**: include class/method docstrings if importing inside them
+- **Comment Block Aggregation**: gather more comments for domain context
+
+Configuration idea:
+
+```python
+wishful.configure(
+    discovery_strategy="scope",  # or "comment", "docstring", "proximity"
+    discovery_strategies=["comment", "docstring"],
+)
+```
+
+---
+
+## Enhanced comment patterns
+
+Support structured comment formats beyond simple “desired:” lines.
+
+Examples:
+
+```python
+# @desired(returns=List[str]): extract email addresses from text
+from wishful.text import extract_emails
+```
+
+```python
+# desired:
+#   parse nginx combined log format
+#   return list of dicts with keys: ip, timestamp, method, path, status, size
+from wishful.logs import parse_nginx_logs
+```
+
+Add parsing for examples and type hints to feed into the prompt.
+
+---
+
+## Cross-file context
+
+When generating a function, look for related functions in cached modules for consistency.
+
+Example: if `.wishful/dates.py` already exists with `parse_date`, include its signature in the prompt when generating `format_date`.
+
+---
+
+## Interactive context enrichment
+
+If context is ambiguous, prompt the user before generation:
+
+```python
+from wishful.text import parse  # Ambiguous! Parse what?
+```
+
+Potential flow:
+1. Detect low-confidence context.
+2. Ask the user for clarification (e.g., “parse JSON or CSV?”).
+3. Use the answer as context and store it alongside the cache.
+
+---
+
+These ideas aren’t all implemented yet—consider them the backlog for making wishful smarter without sacrificing safety or speed.

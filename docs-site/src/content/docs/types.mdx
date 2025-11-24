@@ -1,0 +1,50 @@
+---
+title: Types
+description: Teach the LLM your shapes so it returns the right thing.
+---
+
+`@wishful.type` registers schemas that get inlined into the prompt. Works with dataclasses, Pydantic models, and TypedDicts.
+
+```python
+import wishful
+from dataclasses import dataclass
+
+@wishful.type
+@dataclass
+class Book:
+    title: str
+    author: str
+    year: int
+```
+
+Bind a type to specific function outputs:
+
+```python
+from typing import TypedDict
+
+class ProductInfo(TypedDict):
+    name: str
+    price: float
+
+wishful.type(ProductInfo, output_for=["fetch_product", "create_product"])
+```
+
+Pydantic with constraints (v2-compatible):
+
+```python
+from pydantic import BaseModel, Field
+
+@wishful.type(output_for="plan_trip")
+class TripPlan(BaseModel):
+    city: str
+    days: int = Field(ge=1, le=30)
+    vibe: str = Field(description="tone of the itinerary")
+```
+
+What happens:
+
+- Definitions get serialized to Python code and injected into the system prompt.
+- Output bindings are passed to the LLM so it knows which functions must return which type.
+- Docstrings travel too, so you can nudge style (“sound like a pirate”, “Yoda-speak”, etc.).
+
+See `examples/07_typed_outputs.py` and the 30 tests in `tests/test_types.py` for more patterns.
