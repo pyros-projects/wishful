@@ -73,7 +73,16 @@ if choice.isdigit():
 elif not chosen_hook:
     chosen_hook = hooks[0]
 
-print(chosen_hook)
+# print(chosen_hook)
+
+# Generate intro with dramatic reveal, using the chosen hook as setting
+with console.status("[bold red]The narrator prepares the tale...", spinner="dots"):
+    # The narrator's acknowledgment of the chosen hook/setting á la 'Haha, what a marvelous choice! Do you know...' followed by some ominous and creepy factoid about the setting.
+    acknowledgment = story.cosmic_horror_narrator_acknowledgment(
+        hook=chosen_hook,
+    )
+
+console.print("\n" +acknowledgment + "\n\n")
 
 # Generate intro with dramatic reveal, using the chosen hook as setting
 with console.status("[bold red]The darkness stirs...", spinner="dots"):

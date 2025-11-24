@@ -27,6 +27,8 @@ _DEFAULT_SYSTEM_PROMPT = os.getenv(
         """
     ).strip(),
 )
+_DEFAULT_LOG_LEVEL = os.getenv("WISHFUL_LOG_LEVEL", "WARNING").upper()
+_DEFAULT_LOG_TO_FILE = os.getenv("WISHFUL_LOG_TO_FILE", "1") != "0"
 
 
 @dataclass
@@ -46,6 +48,8 @@ class Settings:
     max_tokens: int = int(os.getenv("WISHFUL_MAX_TOKENS", "4096"))
     temperature: float = float(os.getenv("WISHFUL_TEMPERATURE", "1"))
     system_prompt: str = _DEFAULT_SYSTEM_PROMPT
+    log_level: str = _DEFAULT_LOG_LEVEL
+    log_to_file: bool = _DEFAULT_LOG_TO_FILE
 
     def copy(self) -> "Settings":
         return Settings(
@@ -58,6 +62,8 @@ class Settings:
             max_tokens=self.max_tokens,
             temperature=self.temperature,
             system_prompt=self.system_prompt,
+            log_level=self.log_level,
+            log_to_file=self.log_to_file,
         )
 
 
@@ -75,6 +81,8 @@ def configure(
     temperature: Optional[float] = None,
     max_tokens: Optional[int] = None,
     system_prompt: Optional[str] = None,
+    log_level: Optional[str] = None,
+    log_to_file: Optional[bool] = None,
 ) -> None:
     """Update global settings in-place.
 
@@ -92,11 +100,31 @@ def configure(
         "temperature": temperature,
         "max_tokens": max_tokens,
         "system_prompt": system_prompt,
+        "log_level": log_level.upper() if isinstance(log_level, str) else log_level,
+        "log_to_file": log_to_file,
     }
+
+    # If debug explicitly enabled, default to DEBUG level and file logging unless
+    # caller provided overrides.
+    if debug is True:
+        if updates["log_level"] is None:
+            updates["log_level"] = "DEBUG"
+        if updates["log_to_file"] is None:
+            updates["log_to_file"] = True
+        # Spinners and heavy debug output don't mix nicely
+        if updates["spinner"] is None:
+            updates["spinner"] = False
 
     for attr, value in updates.items():
         if value is not None:
             setattr(settings, attr, value)
+
+    # Reconfigure logging after updates (lazy import to avoid cycles during init)
+    import importlib
+
+    logging_mod = importlib.import_module("wishful.logging")
+    # Ensure sinks are rebuilt with current settings
+    logging_mod.configure_logging(force=True)
 
 
 def reset_defaults() -> None:
@@ -113,3 +141,10 @@ def reset_defaults() -> None:
     settings.max_tokens = defaults.max_tokens
     settings.temperature = defaults.temperature
     settings.system_prompt = defaults.system_prompt
+    settings.log_level = defaults.log_level
+    settings.log_to_file = defaults.log_to_file
+
+    import importlib
+
+    logging_mod = importlib.import_module("wishful.logging")
+    logging_mod.configure_logging(force=True)

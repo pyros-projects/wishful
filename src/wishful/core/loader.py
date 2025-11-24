@@ -8,6 +8,7 @@ from wishful.cache import manager as cache
 from wishful.config import settings
 from wishful.core.discovery import discover
 from wishful.llm.client import GenerationError, generate_module_code
+from wishful.logging import logger
 from wishful.safety.validator import SecurityError, validate_code
 from wishful.ui import spinner
 
@@ -66,12 +67,21 @@ class MagicLoader(importlib.abc.Loader):
 
     def exec_module(self, module: ModuleType) -> None:
         context = discover(self.fullname)
-        source, from_cache = self._load_source(context)
+        source, from_cache, file_path = self._load_source(context)
+
+        logger.debug(
+            "exec_module fullname={} mode={} from_cache={} file={} functions={}",
+            self.fullname,
+            self.mode,
+            from_cache,
+            file_path,
+            context.functions,
+        )
 
         if self.mode == "dynamic":
             self._attach_dynamic_proxy(module)
 
-        self._exec_source(source, module)
+        self._exec_source(source, module, context, file_path=file_path)
         self._ensure_symbols(module, context, from_cache)
         if self.mode == "dynamic":
             self._maybe_review(source)
@@ -81,6 +91,9 @@ class MagicLoader(importlib.abc.Loader):
         self._maybe_review(source)
 
     def _generate_and_cache(self, functions, context):
+        logger.debug(
+            "generate start fullname={} mode={} functions={}", self.fullname, self.mode, functions
+        )
         with spinner(f"Generating {self.fullname}"):
             source = generate_module_code(
                 self.fullname,
@@ -90,24 +103,48 @@ class MagicLoader(importlib.abc.Loader):
                 function_output_types=context.function_output_types,
                 mode=self.mode,
             )
-        # Only write to cache in static mode
         if self.mode == "static":
-            cache.write_cached(self.fullname, source)
-        return source
+            path = cache.write_cached(self.fullname, source)
+        else:
+            path = cache.write_dynamic_snapshot(self.fullname, source)
+        logger.debug("generate done fullname={} path={}", self.fullname, path)
+        return source, path
 
-    def _exec_source(self, source: str, module: ModuleType, clear_first: bool = False) -> None:
+    def _exec_source(
+        self,
+        source: str,
+        module: ModuleType,
+        context,
+        clear_first: bool = False,
+        file_path: str | None = None,
+        allow_retry: bool = True,
+    ) -> None:
         try:
             validate_code(source, allow_unsafe=settings.allow_unsafe)
-        except SecurityError:
-            raise
-        preserved_loader = module.__dict__.get("_wishful_loader")
-        if clear_first:
-            module.__dict__.clear()
-            if preserved_loader is not None:
-                module.__dict__["_wishful_loader"] = preserved_loader
-        module.__file__ = str(cache.module_path(self.fullname))
-        module.__package__ = self.fullname.rpartition('.')[0]
-        exec(compile(source, module.__file__, "exec"), module.__dict__)
+            preserved_loader = module.__dict__.get("_wishful_loader")
+            if clear_first:
+                module.__dict__.clear()
+                if preserved_loader is not None:
+                    module.__dict__["_wishful_loader"] = preserved_loader
+            module.__file__ = file_path or str(cache.module_path(self.fullname))
+            module.__package__ = self.fullname.rpartition('.')[0]
+            exec(compile(source, module.__file__, "exec"), module.__dict__)
+        except SyntaxError:
+            logger.warning("SyntaxError while loading {}; retrying once", self.fullname)
+            if not allow_retry:
+                raise
+            # Regenerate once on syntax errors
+            if self.mode == "static":
+                cache.delete_cached(self.fullname)
+            source2, path2 = self._generate_and_cache(context.functions, context)
+            self._exec_source(
+                source2,
+                module,
+                context,
+                clear_first=True,
+                file_path=str(path2),
+                allow_retry=False,
+            )
 
     def _attach_dynamic_getattr(self, module: ModuleType) -> None:
         def _dynamic_getattr(name: str):
@@ -119,8 +156,8 @@ class MagicLoader(importlib.abc.Loader):
             declared = self._declared_symbols(module)
             desired = sorted(declared | functions | {name})
 
-            source = self._generate_and_cache(desired, ctx)
-            self._exec_source(source, module, clear_first=True)
+            source, path = self._generate_and_cache(desired, ctx)
+            self._exec_source(source, module, ctx, clear_first=True, file_path=str(path))
             # Re-attach for future misses after reload
             setattr(module, "__getattr__", _dynamic_getattr)  # type: ignore[assignment]
             if name in module.__dict__:
@@ -142,16 +179,20 @@ class MagicLoader(importlib.abc.Loader):
             if not k.startswith("__") and not k.startswith("_wishful_")
         }
 
-    def _load_source(self, context) -> tuple[str, bool]:
+    def _load_source(self, context) -> tuple[str, bool, str]:
         # Dynamic mode: always regenerate, never use cache
         if self.mode == "dynamic":
-            return self._generate_and_cache(context.functions, context), False
-        
+            source, path = self._generate_and_cache(context.functions, context)
+            return source, False, str(path)
+
         # Static mode: use cache if available
         source = cache.read_cached(self.fullname)
         if source is not None:
-            return source, True
-        return self._generate_and_cache(context.functions, context), False
+            logger.debug("cache hit fullname={}", self.fullname)
+            return source, True, str(cache.module_path(self.fullname))
+        logger.debug("cache miss fullname={}", self.fullname)
+        source, path = self._generate_and_cache(context.functions, context)
+        return source, False, str(path)
 
     def _ensure_symbols(self, module: ModuleType, context, from_cache: bool) -> None:
         if not context.functions:
@@ -183,23 +224,23 @@ class MagicLoader(importlib.abc.Loader):
     def _regenerate_with(self, module: ModuleType, context) -> None:
         desired = sorted(set(context.functions) | self._declared_symbols(module))
         cache.delete_cached(self.fullname)
-        source = self._generate_and_cache(desired, context)
-        self._exec_source(source, module, clear_first=True)
+        source, path = self._generate_and_cache(desired, context)
+        self._exec_source(source, module, context, clear_first=True, file_path=str(path))
 
     def _regenerate_for_proxy(self, module: ModuleType, requested: str) -> None:
         ctx = discover(self.fullname)
         desired = set(ctx.functions or []) | {requested} | self._declared_symbols(module)
         ctx.functions = sorted(desired)
-        source = self._generate_and_cache(ctx.functions, ctx)
-        self._exec_source(source, module, clear_first=True)
+        source, path = self._generate_and_cache(ctx.functions, ctx)
+        self._exec_source(source, module, ctx, clear_first=True, file_path=str(path))
 
     def _call_with_runtime(self, module: ModuleType, func_name: str, args, kwargs):
         ctx = discover(self.fullname, runtime_context={"function": func_name, "args": args, "kwargs": kwargs})
         desired = set(ctx.functions or []) | {func_name} | self._declared_symbols(module)
         ctx.functions = sorted(desired)
 
-        source = self._generate_and_cache(ctx.functions, ctx)
-        self._exec_source(source, module, clear_first=True)
+        source, path = self._generate_and_cache(ctx.functions, ctx)
+        self._exec_source(source, module, ctx, clear_first=True, file_path=str(path))
 
         target = module.__dict__.get(func_name)
         if callable(target):

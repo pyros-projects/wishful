@@ -39,10 +39,11 @@ def clear_cache() -> None:
     """Delete all generated files from the cache directory."""
 
     cache.clear_cache()
-    # Remove any loaded wishful modules so they regenerate on next import.
+    # Remove generated namespaces so they regenerate on next import.
     for name in list(sys.modules):
-        if name.startswith("wishful."):
+        if name.startswith("wishful.static") or name.startswith("wishful.dynamic"):
             sys.modules.pop(name, None)
+    # Keep root wishful module to retain settings/logging; re-importer can handle children.
 
 
 def inspect_cache() -> List[str]:

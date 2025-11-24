@@ -5,6 +5,13 @@ structured data formats like JSON and YAML.
 """
 
 
+import wishful
+
+
+# Set up logging/cache before importing generated modules
+#wishful.clear_cache()
+wishful.configure(debug=True)
+
 # Desired: parse JSON with automatic type conversion and validation
 from wishful.static.data import parse_json_safe, dict_to_yaml
 

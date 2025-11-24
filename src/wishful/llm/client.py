@@ -7,6 +7,7 @@ import litellm
 
 from wishful.config import settings
 from wishful.llm.prompts import build_messages, strip_code_fences
+from wishful.logging import logger
 
 
 class GenerationError(ImportError):
@@ -56,6 +57,25 @@ def _call_llm(
     messages = build_messages(
         module, functions, context, type_schemas, function_output_types, mode
     )
+    logger.debug(
+        "LLM call module={} mode={} model={} temp={} max_tokens={} functions={} context_len={} type_schemas={} output_types={} preview={}",
+        module,
+        mode,
+        settings.model,
+        settings.temperature,
+        settings.max_tokens,
+        list(functions),
+        len(context) if context else 0,
+        list((type_schemas or {}).keys()),
+        list((function_output_types or {}).keys()),
+        (context[:500] + "…" if context and len(context) > 500 else (context or "")),
+    )
+
+    # Log the actual prompt messages (truncated for safety)
+    prompt_text = "\n".join(f"{m['role'].upper()}: {m['content']}" for m in messages)
+    if len(prompt_text) > 4000:
+        prompt_text = prompt_text[:4000] + "…"
+    logger.debug("LLM prompt for {}:\n{}", module, prompt_text)
     try:
         return litellm.completion(
             model=settings.model,

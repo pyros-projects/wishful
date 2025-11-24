@@ -19,6 +19,17 @@ def module_path(fullname: str) -> Path:
     return settings.cache_dir / relative.with_suffix(".py")
 
 
+def dynamic_snapshot_path(fullname: str) -> Path:
+    """Path for storing dynamic-generation snapshots without affecting cache."""
+    parts = fullname.split(".")
+    if parts[0] == "wishful":
+        parts = parts[1:]
+    if parts and parts[0] in ("static", "dynamic"):
+        parts = parts[1:]
+    relative = Path(*parts) if parts else Path("__init__")
+    return settings.cache_dir / "_dynamic" / relative.with_suffix(".py")
+
+
 def ensure_cache_dir() -> Path:
     settings.cache_dir.mkdir(parents=True, exist_ok=True)
     return settings.cache_dir
@@ -33,6 +44,13 @@ def read_cached(fullname: str) -> Optional[str]:
 
 def write_cached(fullname: str, source: str) -> Path:
     path = module_path(fullname)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(source)
+    return path
+
+
+def write_dynamic_snapshot(fullname: str, source: str) -> Path:
+    path = dynamic_snapshot_path(fullname)
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(source)
     return path
