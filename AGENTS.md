@@ -479,6 +479,13 @@ When extending or adjusting LLM behavior:
 
 ---
 
+## Runtime Invariants & Reload Gotchas
+
+- **Settings singleton lives on `builtins`** (`builtins._wishful_settings`). All imports must share this object so log/config state survives test-time module reloads. Don’t replace it; mutate via `wishful.configure()` / `reset_defaults()`.
+- **Finder is idempotent by class+module name.** `install_finder()` skips adding another `MagicFinder` if one from `wishful.core.finder` is already on `sys.meta_path`; avoid manually inserting your own finder.
+- **Loader honors monkeypatches at call time.** `MagicLoader` resolves `generate_module_code` for each generation, so patching `wishful.core.loader.generate_module_code` (or in tests) works even after module reloads.
+- **When clearing `sys.modules`,** tests typically remove only `wishful.static.*` / `wishful.dynamic.*` (and sometimes `wishful`); keep internal modules unless you have a specific reason, to avoid losing shared singletons.
+
 ## Safety Model
 
 Safety is enforced in `src/wishful/safety/validator.py` via `validate_code(source, allow_unsafe=False)`.
