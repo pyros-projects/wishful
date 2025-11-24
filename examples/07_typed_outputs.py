@@ -12,7 +12,7 @@ from dataclasses import dataclass
 from typing import TypedDict
 
 import wishful
-
+wishful.clear_cache()  # Clear cached generated code for fresh runs
 
 def heading(title: str) -> None:
     print("\n" + "=" * len(title))

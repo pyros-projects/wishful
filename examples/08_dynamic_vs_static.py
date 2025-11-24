@@ -46,12 +46,21 @@ def example_dynamic_runtime():
     
     print("\nCalling with topic='cooking' (regenerates with new context):")
     # In dynamic mode, each import can see different runtime context
-    import sys
-    sys.modules.pop('wishful.dynamic.ideas', None)
+    # import sys
+    # sys.modules.pop('wishful.dynamic.ideas', None)
     from wishful.dynamic.ideas import generate_project_idea as gen2
+    
     idea2 = gen2(topic="cooking")
     print(f"  Result: {idea2}")
     print("  (LLM sees the actual argument values during generation!)")
+
+    print("\nCalling with topic='python ai library':")
+    # In dynamic mode, each import can see different runtime context
+    # import sys
+    # sys.modules.pop('wishful.dynamic.ideas', None)
+    from wishful.dynamic.ideas import generate_project_idea as gen3
+    idea3 = gen3(topic="python ai library")
+    print(f"  Result: {idea3}")
 
 
 def example_why_static():
