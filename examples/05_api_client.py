@@ -4,7 +4,7 @@ This demonstrates using context hints to generate a basic HTTP client.
 """
 
 # Desired: make a GET request with headers, parse JSON response, handle errors gracefully
-from wishful.http import fetch_json, post_json
+from wishful.static.http import fetch_json, post_json
 
 # Note: This will generate a basic HTTP client
 # In fake mode, it returns stub data

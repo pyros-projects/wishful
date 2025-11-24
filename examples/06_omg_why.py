@@ -10,12 +10,12 @@ stop asking "should I?" and start asking "what if?"
 # ========================================
 
 import wishful
-from wishful.colors import complementary_color, hex_to_rgb, rgb_to_hsl
-from wishful.cursed import reverse_words_keep_punctuation, zalgo_text, uwuify
-from wishful.lists import chunk_by_size, flatten_nested, rotate_list
-from wishful.omg import fibonacci_mod_cheese, nth_digit_of_pi, prime_factors
-from wishful.time import day_of_week_for_any_date, seconds_until_christmas, unix_time_to_readable
-from wishful.why import generate_fake_ipsum, random_excuse, rock_paper_scissors_lizard_spock
+from wishful.static.colors import complementary_color, hex_to_rgb, rgb_to_hsl
+from wishful.static.cursed import reverse_words_keep_punctuation, zalgo_text, uwuify
+from wishful.static.lists import chunk_by_size, flatten_nested, rotate_list
+from wishful.static.omg import fibonacci_mod_cheese, nth_digit_of_pi, prime_factors
+from wishful.static.time import day_of_week_for_any_date, seconds_until_christmas, unix_time_to_readable
+from wishful.static.why import generate_fake_ipsum, random_excuse, rock_paper_scissors_lizard_spock
 
 print("\n=== String Crimes ===")
 text = "Hello, world! How are you?"

@@ -4,7 +4,7 @@ This demonstrates generating utilities for common web scraping tasks.
 """
 
 # Desired: extract all links from HTML, clean URLs
-from wishful.web import extract_links, clean_url
+from wishful.static.web import extract_links, clean_url
 
 html = """
 <html>
