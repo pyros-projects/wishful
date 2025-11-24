@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import builtins
 from dataclasses import dataclass, field
 from pathlib import Path
 from textwrap import dedent
@@ -67,7 +68,34 @@ class Settings:
         )
 
 
-settings = Settings()
+# Persist the settings object across module reloads (tests deliberately purge
+# wishful.* modules). Stash it on `builtins` so all imports share the same
+# instance even after sys.modules churn.
+if getattr(builtins, "_wishful_settings", None) is None:
+    builtins._wishful_settings = Settings()
+settings = builtins._wishful_settings  # type: ignore[attr-defined]
+
+
+# Internal helper to load logging module robustly (handles altered sys.modules)
+def _load_logging_module():
+    try:
+        from wishful import logging as logging_mod  # type: ignore
+        return logging_mod
+    except Exception:
+        pass
+    try:
+        import importlib.util
+        import sys
+        path = Path(__file__).parent / "logging.py"
+        spec = importlib.util.spec_from_file_location("wishful.logging", path)
+        if spec and spec.loader:
+            logging_mod = importlib.util.module_from_spec(spec)
+            sys.modules["wishful.logging"] = logging_mod
+            spec.loader.exec_module(logging_mod)  # type: ignore[arg-type]
+            return logging_mod
+    except Exception:
+        return None
+    return None
 
 
 def configure(
@@ -120,11 +148,9 @@ def configure(
             setattr(settings, attr, value)
 
     # Reconfigure logging after updates (lazy import to avoid cycles during init)
-    import importlib
-
-    logging_mod = importlib.import_module("wishful.logging")
-    # Ensure sinks are rebuilt with current settings
-    logging_mod.configure_logging(force=True)
+    logging_mod = _load_logging_module()
+    if logging_mod:
+        logging_mod.configure_logging(force=True)
 
 
 def reset_defaults() -> None:
@@ -144,7 +170,6 @@ def reset_defaults() -> None:
     settings.log_level = defaults.log_level
     settings.log_to_file = defaults.log_to_file
 
-    import importlib
-
-    logging_mod = importlib.import_module("wishful.logging")
-    logging_mod.configure_logging(force=True)
+    logging_mod = _load_logging_module()
+    if logging_mod:
+        logging_mod.configure_logging(force=True)

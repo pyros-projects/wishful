@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+import importlib
 import importlib.abc
 import importlib.util
+import sys
 from types import ModuleType
 
 from wishful.cache import manager as cache
@@ -11,6 +13,27 @@ from wishful.llm.client import GenerationError, generate_module_code
 from wishful.logging import logger
 from wishful.safety.validator import SecurityError, validate_code
 from wishful.ui import spinner
+
+def _resolve_generate_module_code():
+    """Use the generate_module_code function from the live loader module.
+
+    MagicLoader instances can outlive module reloads during tests; looking up
+    the function each time keeps monkeypatches effective while preferring any
+    patched version over the original default.
+    """
+    default_fn = importlib.import_module("wishful.llm.client").generate_module_code
+
+    mod = sys.modules.get(__name__)
+    candidates = []
+    if mod is not None and hasattr(mod, "generate_module_code"):
+        candidates.append(getattr(mod, "generate_module_code"))
+    # Always consider the function bound in this module too
+    candidates.append(generate_module_code)
+
+    for fn in candidates:
+        if fn is not default_fn:
+            return fn
+    return default_fn
 
 
 class DynamicProxyModule(ModuleType):
@@ -91,11 +114,13 @@ class MagicLoader(importlib.abc.Loader):
         self._maybe_review(source)
 
     def _generate_and_cache(self, functions, context):
+        logger.info("Generating {}", self.fullname)
         logger.debug(
             "generate start fullname={} mode={} functions={}", self.fullname, self.mode, functions
         )
         with spinner(f"Generating {self.fullname}"):
-            source = generate_module_code(
+            gen_fn = _resolve_generate_module_code()
+            source = gen_fn(
                 self.fullname,
                 functions,
                 context.context,
