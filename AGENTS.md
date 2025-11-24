@@ -124,6 +124,47 @@ The project uses **three distinct namespaces**:
 
 **Critical for tests and examples:** Always use `wishful.static.*` or `wishful.dynamic.*` for generated modules, never bare `wishful.*` (which would conflict with internal modules).
 
+### Dynamic Import Mechanics (Critical!)
+
+Understanding how `wishful.dynamic.*` imports work is essential for correct usage:
+
+**How Dynamic Modules Work:**
+- Dynamic modules use `DynamicProxyModule`, which wraps callable attributes
+- Each **function call** triggers fresh regeneration with runtime context
+- The `_call_with_runtime` method captures actual arguments and regenerates code based on them
+
+**Correct Usage Patterns:**
+
+```python
+# ✓ CORRECT: Import the module, then call functions on it
+import wishful.dynamic.jokes
+print(wishful.dynamic.jokes.programming_joke())  # Regenerates!
+print(wishful.dynamic.jokes.programming_joke())  # Regenerates again!
+
+# ✓ ALSO CORRECT: Use wishful.reimport() for explicit control
+jokes = wishful.reimport('wishful.dynamic.jokes')
+print(jokes.programming_joke())  # Fresh generation
+
+# ✗ WRONG: Importing individual functions binds them once
+from wishful.dynamic.jokes import programming_joke
+print(programming_joke())  # First call works
+print(programming_joke())  # NO regeneration! Same function!
+```
+
+**Why the Anti-Pattern Fails:**
+- `from wishful.dynamic.X import func` binds `func` to the local namespace **once**
+- Subsequent calls to `func()` just execute the already-bound function object
+- No regeneration occurs because Python doesn't re-execute the import statement
+
+**When to Use `reimport()`:**
+- Explicit control over when regeneration happens
+- Useful in loops where you want fresh generation on each iteration
+- Works with both `wishful.static.*` (bypasses cache) and `wishful.dynamic.*` (same as normal behavior)
+
+**Key Takeaway:** For `wishful.dynamic.*`, always import the **module**, not individual functions.
+
+---
+
 Key properties:
 
 - Uses a custom **import hook** (meta‑path finder + loader) with namespace routing.

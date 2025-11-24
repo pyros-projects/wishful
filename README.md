@@ -197,16 +197,56 @@ The cache is just regular Python files in `.wishful/`. Want to tweak the generat
 import wishful
 
 wishful.configure(
-    model="gpt-4o-mini",        # Switch models like changing channels
-    cache_dir="/tmp/.wishful",  # Hide your wishes somewhere else
-    spinner=False,              # Silence the "generating..." spinner
-    review=True,                # Review code before it runs
-    context_radius=6,           # Lines of context (default: 3)
-    allow_unsafe=False,         # Keep safety rails ON (recommended)
+    model="openai/gpt-5",          # Switch models - use litellm model IDs (default: "azure/gpt-4.1")
+    cache_dir="/tmp/.wishful",     # Cache directory for generated modules (default: ".wishful")
+    spinner=False,                 # Show/hide the "generating..." spinner (default: True)
+    review=True,                   # Review code before execution (default: False)
+    allow_unsafe=False,            # Disable safety checks - dangerous! (default: False)
+    temperature=0.7,               # LLM sampling temperature (default: 1.0)
+    max_tokens=8000,               # Maximum LLM response tokens (default: 4096)
+    debug=True,                    # Enable debug logging (default: False)
+    log_level="INFO",              # Logging level: DEBUG, INFO, WARNING, ERROR (default: WARNING)
+    log_to_file=True,              # Write logs to cache_dir/_logs/ (default: True)
+    system_prompt="Custom prompt", # Override the system prompt for LLM (advanced)
 )
+
+# Context radius is configured separately
+wishful.set_context_radius(6)  # Lines of context around imports (default: 3)
 ```
 
-**Environment variables**: `WISHFUL_MODEL`, `WISHFUL_CACHE_DIR`, `WISHFUL_REVIEW`, `WISHFUL_DEBUG`, `WISHFUL_UNSAFE`, `WISHFUL_SPINNER`, `WISHFUL_MAX_TOKENS`, `WISHFUL_TEMPERATURE`, `WISHFUL_CONTEXT_RADIUS`
+**All Configuration Options:**
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `model` | `str` | `"azure/gpt-4.1"` | LLM model identifier (litellm format) |
+| `cache_dir` | `str \| Path` | `".wishful"` | Directory for cached generated modules |
+| `review` | `bool` | `False` | Prompt for approval before executing generated code |
+| `spinner` | `bool` | `True` | Show spinner during LLM generation |
+| `allow_unsafe` | `bool` | `False` | Disable safety validation (use with caution!) |
+| `temperature` | `float` | `1.0` | LLM sampling temperature (0.0-2.0) |
+| `max_tokens` | `int` | `4096` | Maximum tokens for LLM response |
+| `debug` | `bool` | `False` | Enable debug mode (sets log_level to DEBUG) |
+| `log_level` | `str` | `"WARNING"` | Logging level (DEBUG, INFO, WARNING, ERROR) |
+| `log_to_file` | `bool` | `True` | Write logs to `{cache_dir}/_logs/` |
+| `system_prompt` | `str` | _(see source)_ | Custom system prompt for LLM (advanced) |
+
+**Environment Variables:**
+
+All settings can also be configured via environment variables:
+
+- `WISHFUL_MODEL` or `DEFAULT_MODEL` - LLM model identifier
+- `WISHFUL_CACHE_DIR` - Cache directory path
+- `WISHFUL_REVIEW` - Set to `"1"` to enable review mode
+- `WISHFUL_DEBUG` - Set to `"1"` to enable debug mode
+- `WISHFUL_UNSAFE` - Set to `"1"` to disable safety checks
+- `WISHFUL_SPINNER` - Set to `"0"` to disable spinner
+- `WISHFUL_MAX_TOKENS` - Maximum tokens (integer)
+- `WISHFUL_TEMPERATURE` - Sampling temperature (float)
+- `WISHFUL_CONTEXT_RADIUS` - Context lines around imports (integer)
+- `WISHFUL_LOG_LEVEL` - Logging level (DEBUG, INFO, WARNING, ERROR)
+- `WISHFUL_LOG_TO_FILE` - Set to `"0"` to disable file logging
+- `WISHFUL_SYSTEM_PROMPT` - Custom system prompt
+- `WISHFUL_FAKE_LLM` - Set to `"1"` for deterministic stub generation (testing)
 
 ---
 
@@ -267,9 +307,25 @@ from wishful.static.dates import parse_fuzzy_date
 print(parse_fuzzy_date("next Tuesday"))  # Your guess is as good as mine
 
 # Want different results each time? Use dynamic imports!
-from wishful.dynamic.jokes import programming_joke
+# The key: import the MODULE, not individual functions!
+import wishful
+import wishful.dynamic.jokes
 
-print(programming_joke())  # New joke on every import 🎲
+# Each function CALL triggers fresh regeneration with runtime context
+print(wishful.dynamic.jokes.programming_joke())  # Fresh joke!
+print(wishful.dynamic.jokes.programming_joke())  # Different joke! 🎲
+print(wishful.dynamic.jokes.programming_joke())  # Another new joke!
+
+# Alternative: use wishful.reimport() to force a fresh module load
+jokes = wishful.reimport('wishful.dynamic.jokes')
+print(jokes.programming_joke())  # Also regenerates!
+
+# Why does this matter?
+# ✓ DO:   import wishful.dynamic.jokes
+#         wishful.dynamic.jokes.my_func()  # Regenerates on each call
+# ✓ DO:   wishful.reimport('wishful.dynamic.jokes')  # Forces fresh import
+# ✗ DON'T: from wishful.dynamic.jokes import my_func
+#          my_func()  # This binds once and won't regenerate!
 ```
 
 ---
