@@ -89,6 +89,8 @@ If you find yourself about to type `python …` or `pytest …`, prepend `uv run
 
 `uv` will keep `pyproject.toml` and `uv.lock` in sync. Do not edit the lock file by hand.
 
+- **Docs site:** lives in `docs-site/`, built with Astro + Starlight. Use `npm install`, `npm run dev`, `npm run build` there. Keep using `uv` for all Python tasks.
+
 ---
 
 ## High‑Level Overview

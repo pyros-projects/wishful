@@ -1,0 +1,51 @@
+---
+title: Configuration
+description: Toggle behavior from code or env vars without summoning a yak.
+---
+
+## From Python
+
+```python
+import wishful
+
+wishful.configure(
+    model="gpt-4.1-mini",
+    cache_dir=".wishful",
+    review=False,
+    debug=True,
+    allow_unsafe=False,
+    spinner=False,
+    max_tokens=4096,
+    temperature=0.6,
+)
+```
+
+- `configure` mutates a shared singleton (`builtins._wishful_settings`), so changes stick across reloads.
+- `reset_defaults()` snaps back to env-driven defaults.
+
+## Environment variables (loaded via python-dotenv)
+
+| Variable | Effect | Default |
+| --- | --- | --- |
+| `WISHFUL_MODEL` / `DEFAULT_MODEL` | LLM model id | `azure/gpt-4.1` |
+| `WISHFUL_CACHE_DIR` | Cache root | `.wishful` |
+| `WISHFUL_REVIEW` | `"1"` to prompt/approve code | `0` |
+| `WISHFUL_DEBUG` | `"1"` enables extra logging | `0` |
+| `WISHFUL_UNSAFE` | `"1"` disables safety checks | `0` |
+| `WISHFUL_SPINNER` | `"0"` disables spinner | `1` |
+| `WISHFUL_MAX_TOKENS` | Max tokens per response | `4096` |
+| `WISHFUL_TEMPERATURE` | Sampling temperature | `1` |
+| `WISHFUL_CONTEXT_RADIUS` | Lines of surrounding code to capture | `3` |
+| `WISHFUL_FAKE_LLM` | `"1"` → deterministic stub generation | `0` |
+
+## Safety
+
+- Safety checks block `os`, `subprocess`, `sys` imports; `eval/exec`; and `open` in write-ish modes unless `allow_unsafe=True`.
+- Tests flip `allow_unsafe=True` by default, so don’t blindly copy test fixtures into production code.
+
+## Logging
+
+- `log_level` & `log_to_file` piggyback on `wishful.settings`.
+- Logs live under `<cache_dir>/_logs/YYYY-MM-DD.log` when file logging is on (enabled by default; stays in the sandboxed cache dir).
+
+Want to see the knobs in action? Pair this with the [CLI](/cli).

@@ -14,3 +14,7 @@ coverage.xml
 .coverage
 .internal/
 .wishful/
+node_modules/
+docs-site/node_modules/
+docs-site/.astro/
+docs-site/dist/

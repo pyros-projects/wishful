@@ -1,0 +1,42 @@
+---
+title: CLI
+description: Small-but-handy commands baked into `python -m wishful`.
+---
+
+All commands should be run with `uv run` in this repo:
+
+```bash
+uv run python -m wishful --help
+```
+
+### Inspect cache
+
+```bash
+uv run python -m wishful inspect
+```
+
+Lists cached modules under `settings.cache_dir`.
+
+### Clear cache
+
+```bash
+uv run python -m wishful clear
+```
+
+Deletes everything under the cache dir (including dynamic snapshots and logs).
+
+### Regenerate a module
+
+```bash
+uv run python -m wishful regen wishful.static.text
+# shorthand (defaults to static namespace)
+uv run python -m wishful regen text
+```
+
+Removes the cached module so the next import triggers fresh generation.
+
+### Pro tips
+
+- These CLI helpers mirror the Python API: `inspect_cache`, `clear_cache`, `regenerate`.
+- Cache paths strip both `static` and `dynamic` prefixes, so dynamic and static share the same cache file.
+- Logs live under `<cache_dir>/_logs/`; clearing the cache nukes them too.

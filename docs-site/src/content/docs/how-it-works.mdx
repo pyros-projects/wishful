@@ -1,0 +1,40 @@
+---
+title: How it works
+description: The import hook magic in three bites.
+---
+
+### 1) Finder & loader
+
+- Importing `wishful` installs a `MagicFinder` at the front of `sys.meta_path`.
+- Imports under `wishful.static.*` and `wishful.dynamic.*` get routed to `MagicLoader`.
+- Internal modules (`wishful.core`, `wishful.config`, …) bypass the hook to avoid recursion.
+
+### 2) Context discovery
+
+`discover()` looks around the call site:
+- Parses the import to know which symbols are wanted.
+- Scrapes nearby code/comments (radius configurable via `WISHFUL_CONTEXT_RADIUS` or `wishful.set_context_radius`).
+- Pulls registered type schemas and output bindings from `@wishful.type`.
+
+That bundle becomes prompt seasoning for the LLM.
+
+### 3) Generation + caching
+
+- **Static:** check cache → use if present; otherwise generate once and write to `.wishful/<module>.py`.
+- **Dynamic:** always regenerate (runtime-context-aware), and also write a snapshot under `.wishful/_dynamic/`.
+- Safety gate: `validate_code` blocks dangerous imports/calls unless `allow_unsafe=True`.
+- Missing symbols? Static loader regenerates with the expanded symbol set. Dynamic loader proxies `__getattr__` and call-time regeneration.
+
+### 4) Settings & singletons
+
+- `wishful.settings` is stored on `builtins` so it survives module reloads (handy for tests).
+- `install_finder()` is idempotent: if a finder from `wishful.core.finder` is already present, it won’t stack duplicates.
+- `MagicLoader` resolves `generate_module_code` each call, so monkeypatches work even after reloads.
+
+### 5) Cache layout
+
+- `wishful.static.foo` → `.wishful/foo.py`
+- `wishful.dynamic.foo` → `.wishful/foo.py` (same cache file) plus dynamic snapshot `.wishful/_dynamic/foo.py`
+- CLI helpers (`wishful inspect/clear/regen`) and Python helpers (`inspect_cache`, `clear_cache`, `regenerate`) manage these paths.
+
+That’s the core loop. Everything else (CLI, types, logging) builds on this. For knobs you can turn, see [Configuration](/configuration).

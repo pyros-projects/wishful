@@ -1,0 +1,36 @@
+---
+title: Contributing
+description: Bring your own keyboard, we’ve got the magic.
+---
+
+### Ground rules (short version)
+
+- Use `uv` for everything Python. No raw `pip`, no bare `python`/`pytest` in this repo.
+- Python ≥ 3.12; dependencies locked in `uv.lock`.
+- Tests are the contract. Run `uv run pytest` before/after changes.
+- Safety rules matter; don’t weaken them without updating docs + tests.
+
+### Dev loop
+
+```bash
+uv sync
+uv run pytest              # or a focused file
+```
+
+When touching docs:
+
+```bash
+cd docs-site
+npm install
+npm run dev   # or npm run build
+```
+
+### Handy references
+
+- `AGENTS.md` — house style, architecture, and “don’t step on that rake” notes.
+- `examples/` — progressively weirder demos.
+- `tests/` — best source of truth for expected behavior.
+
+### Philosophical note
+
+wishful isn’t a hardened enterprise core lib (yet). Keep the tone playful, the code safe, and the UX frictionless. If a change isn’t fun to explain, maybe it isn’t ready.

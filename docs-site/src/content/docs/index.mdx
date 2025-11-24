@@ -1,0 +1,23 @@
+---
+title: Welcome
+description: LLM imports that feel like a magic trick.
+---
+
+> “import wishful” and let the model do the heavy lifting — with guard rails, caching, and a dash of silliness.
+
+### Why wishful?
+
+- **JIT codegen via imports.** `from wishful.static.text import extract_emails` generates the function the first time, caches it, and reuses it.
+- **Context-aware prompts.** Nearby code/comments and registered types steer the LLM.
+- **Safety valves.** AST validation blocks dangerous imports/calls unless you explicitly opt in.
+- **Offline-friendly tests.** `WISHFUL_FAKE_LLM=1` gives deterministic stubs; the test suite never needs the network.
+
+### What’s in this doc site?
+
+- **Quickstart** — install, run your first import, fake-LLM mode.
+- **How it works** — the import hook, cache layout, dynamic vs static.
+- **Configuration & CLI** — knobs you can turn from code or env vars.
+- **Types** — using `@wishful.type` to nudge the model.
+- **Contributing** — how to hack on the project (with UV and good vibes).
+
+If you’re here to just try it: hop to [Quickstart](/quickstart). If you want the tour, keep scrolling.

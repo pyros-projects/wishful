@@ -1,0 +1,29 @@
+:root {
+  --sl-color-accent-high: #f97316;
+  --sl-color-accent: #fb923c;
+  --sl-color-accent-low: #fff7ed;
+  --sl-color-bg: #0f172a;
+  --sl-color-surface: #111827;
+  --sl-color-text: #e5e7eb;
+  --sl-color-text-soft: #cbd5e1;
+  --sl-color-text-accent: #f97316;
+  --sl-color-border: #1f2937;
+}
+
+:root[data-theme='light'] {
+  --sl-color-bg: #fffaf5;
+  --sl-color-surface: #fff4eb;
+  --sl-color-text: #0f172a;
+  --sl-color-text-soft: #334155;
+  --sl-color-border: #ffe8d9;
+}
+
+.hero {
+  background: radial-gradient(120% 120% at 20% 20%, #fff0d6, transparent),
+    radial-gradient(80% 80% at 80% 10%, #ffedd5, transparent),
+    radial-gradient(90% 90% at 50% 80%, #0f172a, #0b1220);
+}
+
+.sl-markdown code {
+  font-size: 0.95em;
+}

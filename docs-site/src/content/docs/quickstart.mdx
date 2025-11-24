@@ -1,0 +1,59 @@
+---
+title: Quickstart
+description: From zero to “it runs” in under five minutes.
+---
+
+## 1) Prereqs
+
+- Python 3.12+
+- Node 18+ (only if you’re building this doc site; not needed to use wishful)
+- `uv` installed globally (`curl -LsSf https://astral.sh/uv/install.sh | sh`)
+
+## 2) Sync the project
+
+```bash
+uv sync
+```
+
+This installs the runtime + dev dependencies into `.venv` based on `uv.lock`.
+
+## 3) Your first wish
+
+```bash
+uv run python - <<'PY'
+import wishful
+
+# Use the fake LLM so this runs offline/deterministically
+import os
+os.environ["WISHFUL_FAKE_LLM"] = "1"
+
+from wishful.static.text import meaning_of_life
+
+print("The meaning is:", meaning_of_life())
+PY
+```
+
+What happens:
+- `wishful` installs its import hook.
+- The first import triggers generation; in fake mode you get a stub that returns inputs (or a friendly constant).
+- The generated module is cached under `.wishful/`.
+
+## 4) Run the test suite
+
+```bash
+uv run pytest
+```
+
+All tests are network-free by design.
+
+## 5) Clean up
+
+```bash
+uv run python - <<'PY'
+import wishful
+wishful.clear_cache()
+print(wishful.inspect_cache())  # should be empty
+PY
+```
+
+That’s it. For deeper understanding, jump to [How it works](/how-it-works).
