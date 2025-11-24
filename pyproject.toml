@@ -1,6 +1,6 @@
 [project]
 name = "wishful"
-version = "0.2.2"
+version = "0.2.3"
 description = "Wishful thinking for Python"
 readme = "README.md"
 authors = [
