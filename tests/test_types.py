@@ -47,7 +47,8 @@ class MockBaseModel:
                 {
                     'annotation': ann,
                     'default': getattr(cls, name, None),
-                    'default_factory': None
+                    'default_factory': None,
+                    'is_required': lambda self=None: getattr(cls, name, None) is None,
                 }
             )()
             for name, ann in annotations.items()

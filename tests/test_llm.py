@@ -40,6 +40,8 @@ def test_build_messages_with_type_schemas():
     messages = build_messages("wishful.users", ["create_user"], None, type_schemas=type_schemas)
     assert "UserProfile" in messages[1]["content"]
     assert "BaseModel" in messages[1]["content"]
+    assert "Type definitions to include" in messages[1]["content"]
+    assert "Do NOT import them" in messages[1]["content"]
 
 
 def test_build_messages_with_function_output_types():

@@ -97,27 +97,106 @@ class TypeRegistry:
             for field_name, field_info in model_class.model_fields.items():
                 annotation = self._format_annotation(field_info.annotation)
 
-                # Handle default values
-                if field_info.default is not None:
-                    default_repr = repr(field_info.default)
-                    lines.append(f"    {field_name}: {annotation} = {default_repr}")
-                elif field_info.default_factory is not None:
-                    lines.append(
-                        f"    {field_name}: {annotation} = Field(default_factory=...)"
-                    )
+                # Check if field is required (has no default)
+                # Use callable check for robustness with mocks
+                is_required = field_info.is_required() if callable(getattr(field_info, 'is_required', None)) else (field_info.default is None and field_info.default_factory is None)
+                
+                # Check if field has metadata (Field() usage)
+                has_field_metadata = hasattr(field_info, 'metadata') and field_info.metadata
+                has_constraints = any(
+                    hasattr(field_info, attr) and getattr(field_info, attr) is not None
+                    for attr in ['description', 'min_length', 'max_length', 'gt', 'ge', 'lt', 'le', 'pattern']
+                )
+                
+                if is_required:
+                    if has_field_metadata or has_constraints:
+                        # Build Field() arguments
+                        field_args = self._build_field_args(field_info)
+                        lines.append(f"    {field_name}: {annotation} = Field({field_args})")
+                    else:
+                        lines.append(f"    {field_name}: {annotation}")
                 else:
-                    lines.append(f"    {field_name}: {annotation}")
+                    # Field has a default value or default_factory
+                    if field_info.default_factory is not None:
+                        field_args = self._build_field_args(field_info)
+                        if field_args:
+                            lines.append(
+                                f"    {field_name}: {annotation} = Field(default_factory=..., {field_args})"
+                            )
+                        else:
+                            lines.append(
+                                f"    {field_name}: {annotation} = Field(default_factory=...)"
+                            )
+                    else:
+                        # Has a default value
+                        if has_field_metadata or has_constraints:
+                            field_args = self._build_field_args(field_info)
+                            default_repr = repr(field_info.default)
+                            lines.append(f"    {field_name}: {annotation} = Field(default={default_repr}, {field_args})")
+                        else:
+                            default_repr = repr(field_info.default)
+                            lines.append(f"    {field_name}: {annotation} = {default_repr}")
         elif hasattr(model_class, "__fields__"):
             # Pydantic v1
             for field_name, field in model_class.__fields__.items():
                 annotation = self._format_annotation(field.outer_type_)
-                if field.default is not None:
+                if field.required:
+                    lines.append(f"    {field_name}: {annotation}")
+                else:
                     default_repr = repr(field.default)
                     lines.append(f"    {field_name}: {annotation} = {default_repr}")
-                else:
-                    lines.append(f"    {field_name}: {annotation}")
 
         return "\n".join(lines)
+    
+    def _build_field_args(self, field_info) -> str:
+        """Build Field() arguments from field_info metadata and constraints."""
+        args = []
+        
+        # Add description
+        if hasattr(field_info, 'description') and field_info.description:
+            args.append(f"description={repr(field_info.description)}")
+        
+        # Parse metadata for Pydantic v2 constraints
+        if hasattr(field_info, 'metadata') and field_info.metadata:
+            for meta_item in field_info.metadata:
+                meta_class = meta_item.__class__.__name__
+                
+                # Handle common constraint types
+                if meta_class == 'MinLen' and hasattr(meta_item, 'min_length'):
+                    args.append(f"min_length={meta_item.min_length}")
+                elif meta_class == 'MaxLen' and hasattr(meta_item, 'max_length'):
+                    args.append(f"max_length={meta_item.max_length}")
+                elif meta_class == 'Gt' and hasattr(meta_item, 'gt'):
+                    args.append(f"gt={meta_item.gt}")
+                elif meta_class == 'Ge' and hasattr(meta_item, 'ge'):
+                    args.append(f"ge={meta_item.ge}")
+                elif meta_class == 'Lt' and hasattr(meta_item, 'lt'):
+                    args.append(f"lt={meta_item.lt}")
+                elif meta_class == 'Le' and hasattr(meta_item, 'le'):
+                    args.append(f"le={meta_item.le}")
+                elif meta_class == '_PydanticGeneralMetadata':
+                    # Handle pattern and other general metadata
+                    if hasattr(meta_item, 'pattern') and meta_item.pattern:
+                        args.append(f"pattern={repr(meta_item.pattern)}")
+        
+        # Fallback: check direct attributes (Pydantic v1 or custom)
+        constraints = [
+            ('min_length', 'min_length'),
+            ('max_length', 'max_length'),
+            ('gt', 'gt'),
+            ('ge', 'ge'),
+            ('lt', 'lt'),
+            ('le', 'le'),
+            ('pattern', 'pattern'),
+        ]
+        
+        for attr_name, arg_name in constraints:
+            if hasattr(field_info, attr_name):
+                value = getattr(field_info, attr_name)
+                if value is not None and arg_name not in ' '.join(args):  # Avoid duplicates
+                    args.append(f"{arg_name}={repr(value)}")
+        
+        return ", ".join(args)
 
     def _serialize_dataclass(self, dc_class: type) -> str:
         """Serialize a dataclass to source code."""

@@ -10,9 +10,11 @@ Run with: `uv run python examples/07_typed_outputs.py`
 import os
 from dataclasses import dataclass
 from typing import TypedDict
+from pydantic import BaseModel, Field
 
 import wishful
 wishful.clear_cache()  # Clear cached generated code for fresh runs
+wishful.configure(allow_unsafe=True) 
 
 def heading(title: str) -> None:
     print("\n" + "=" * len(title))
@@ -175,6 +177,26 @@ def example_validated_types():
     print("(With real LLM, these would return Person instances with validation)")
 
 
+# Example 6: Pydantic
+@wishful.type
+class ProjectPlan(BaseModel):
+    """Project plan written by master yoda from star wars."""
+    project_brief: str
+    milestones: list[str] = Field(description="list of milestones", min_length=10)
+
+def example_pydantic():
+    heading("Example 6: Pydantic")
+    
+    from wishful.static.pm import project_plan_generator
+    
+    # validate_age checks if age is in valid range
+    result = project_plan_generator(idea="sudoku web app")
+    print(f"{result}")
+    
+
+
+
+
 def main():
     # Make output deterministic in CI if desired
     if os.getenv("WISHFUL_FAKE_LLM") == "1":
@@ -189,6 +211,7 @@ def main():
     example_shared_type()
     example_nested_types()
     example_validated_types()
+    example_pydantic()
     
     print("\n" + "=" * 60)
     print("✨ All examples completed!")

@@ -44,8 +44,8 @@ or any provider else supported by litellm
 **3. Import your wildest fantasies**
 
 ```python
-from wishful.text import extract_emails
-from wishful.dates import to_yyyy_mm_dd
+from wishful.static.text import extract_emails
+from wishful.static.dates import to_yyyy_mm_dd
 
 raw = "Contact us at team@example.com or sales@demo.dev"
 print(extract_emails(raw))  # ['team@example.com', 'sales@demo.dev']
@@ -59,6 +59,8 @@ print(to_yyyy_mm_dd("31.12.2025"))  # '2025-12-31'
 
 It's like having a junior dev who never sleeps and always delivers exactly what you asked for (well, _almost_ always).
 
+> **Note**: Use `wishful.static.*` for cached imports (recommended) or `wishful.dynamic.*` for runtime-aware regeneration on every import. See [Static vs Dynamic](#-static-vs-dynamic-when-to-use-which) below.
+
 ---
 
 ## 🎯 Wishful Guidance: Help the AI Read Your Mind
@@ -67,12 +69,102 @@ Want better results? Drop hints. Literal comments. wishful reads the code _aroun
 
 ```python
 # desired: parse standard nginx combined logs into list of dicts
-from wishful.logs import parse_nginx_logs
+from wishful.static.logs import parse_nginx_logs
 
 records = parse_nginx_logs(Path("/var/log/nginx/access.log").read_text())
 ```
 
 The AI sees your comment and knows _exactly_ what you're after. It's like pair programming, but your partner is a disembodied intelligence with questionable opinions about semicolons.
+
+---
+
+## 🎨 Type Registry: Teach the AI Your Data Structures
+
+Want the LLM to generate functions that return **properly structured data**? Register your types with `@wishful.type`:
+
+### Pydantic Models with Constraints
+
+```python
+from pydantic import BaseModel, Field
+import wishful
+
+@wishful.type
+class ProjectPlan(BaseModel):
+    """Project plan written by master yoda from star wars."""
+    project_brief: str
+    milestones: list[str] = Field(description="list of milestones", min_length=10)
+    budget: float = Field(gt=0, description="project budget in USD")
+
+# Now the LLM knows about ProjectPlan and will respect Field constraints!
+from wishful.static.pm import project_plan_generator
+
+plan = project_plan_generator(idea="sudoku web app")
+print(plan.milestones)  
+# ['Decide, you must, key features.', 'Wireframe, you will, the interface.', ...]
+# ^ 10+ milestones in Yoda-speak because of the docstring! 🎭
+```
+
+**What's happening here?**
+- The `@wishful.type` decorator registers your Pydantic model
+- The **docstring** influences the LLM's tone/style (Yoda-speak!)
+- **Field constraints** (`min_length=10`, `gt=0`) are actually enforced
+- Generated code uses your exact type definition
+
+### Dataclasses and TypedDict Too
+
+```python
+from dataclasses import dataclass
+from typing import TypedDict
+
+@wishful.type(output_for="parse_user_data")
+@dataclass
+class UserProfile:
+    """User profile with name, email, and age."""
+    name: str
+    email: str
+    age: int
+
+class ProductInfo(TypedDict):
+    """Product information."""
+    name: str
+    price: float
+    in_stock: bool
+
+# Tell the LLM multiple functions use this type
+wishful.type(ProductInfo, output_for=["parse_product", "create_product"])
+```
+
+The LLM will generate functions that return instances of your registered types. It's like having an API contract, but the implementation writes itself. ✨
+
+---
+
+## 🔄 Static vs Dynamic: When to Use Which
+
+wishful supports two import modes:
+
+### `wishful.static.*` — Cached & Consistent (Default)
+
+```python
+from wishful.static.text import extract_emails
+```
+
+- ✅ **Cached**: Generated once, reused forever
+- ✅ **Fast**: No LLM calls after first import
+- ✅ **Editable**: Tweak `.wishful/text.py` directly
+- 👉 **Use for**: utilities, parsers, validators, anything stable
+
+### `wishful.dynamic.*` — Runtime-Aware & Fresh
+
+```python
+from wishful.dynamic.content import generate_story
+```
+
+- 🔄 **Regenerates**: Fresh LLM call on every import
+- 🎯 **Context-aware**: Captures runtime context each time
+- 🎨 **Creative**: Different results on each run
+- 👉 **Use for**: creative content, experiments, testing variations
+
+Both share the same cache file (`.wishful/text.py`), so you can switch modes freely.
 
 ---
 
@@ -87,7 +179,7 @@ import wishful
 wishful.inspect_cache()   # ['.wishful/text.py', '.wishful/dates.py']
 
 # Regret a wish? Regenerate it
-wishful.regenerate("wishful.text")  # Next import re-generates from scratch
+wishful.regenerate("wishful.static.text")  # Next import re-generates from scratch
 
 # Nuclear option: forget everything
 wishful.clear_cache()  # Deletes the entire .wishful/ directory
@@ -105,7 +197,7 @@ wishful inspect
 wishful clear
 
 # Regenerate a specific module
-wishful regen wishful.text
+wishful regen wishful.static.text
 ```
 
 The cache is just regular Python files in `.wishful/`. Want to tweak the generated code? Edit it directly. It's your wish, after all.
@@ -179,22 +271,22 @@ python my_tests.py  # No API calls, just predictable stubs
 
 Here's the 30-second version:
 
-1. **Import hook**: wishful installs a `MagicFinder` on `sys.meta_path` that intercepts `wishful.*` imports.
-2. **Cache check**: If `.wishful/<module>.py` exists, it loads instantly. No AI needed.
-3. **LLM generation**: If not cached, wishful calls the LLM (via `litellm`) to generate the code based on your import and surrounding context.
-4. **Validation**: The generated code is AST-parsed and safety-checked (unless you disabled that like a madman).
-5. **Execution**: Code is written to `.wishful/`, compiled, and executed as the import result.
-6. **Transparency**: The cache is just plain Python files. Edit them. Commit them. They're yours.
+1. **Import hook**: wishful installs a `MagicFinder` on `sys.meta_path` that intercepts `wishful.static.*` and `wishful.dynamic.*` imports.
+2. **Cache check**: For `static` imports, if `.wishful/<module>.py` exists, it loads instantly. `dynamic` imports always regenerate.
+3. **Context discovery**: wishful captures nearby comments, code, and registered type schemas to send to the LLM.
+4. **LLM generation**: The LLM (via `litellm`) generates code based on your import, context, and type definitions.
+5. **Validation**: The generated code is AST-parsed and safety-checked (unless you disabled that like a madman).
+6. **Execution**: Code is written to `.wishful/`, compiled, and executed as the import result.
+7. **Transparency**: The cache is just plain Python files. Edit them. Commit them. They're yours.
 
-It's import hooks meets LLMs meets "why didn't this exist already?"
+It's import hooks meets LLMs meets type-aware code generation meets "why didn't this exist already?"
 
 ---
 
 ## 🎭 Fun with Wishful Thinking
 
 ```python
-# Need some cosmic horror? Just wish for it.
-from wishful.story import cosmic_horror_intro
+# Need some cosatic.story import cosmic_horror_intro
 
 intro = cosmic_horror_intro(
     setting="a deserted amusement park",
@@ -203,14 +295,20 @@ intro = cosmic_horror_intro(
 print(intro)  # 🎢👻
 
 # Math that writes itself
-from wishful.numbers import primes_from_to, sum_list
+from wishful.static.numbers import primes_from_to, sum_list
 
 total = sum_list(list=primes_from_to(1, 100))
 print(total)  # 1060 (probably)
 
 # Because who has time to write date parsers?
-from wishful.dates import parse_fuzzy_date
+from wishful.static.dates import parse_fuzzy_date
 
+print(parse_fuzzy_date("next Tuesday"))  # Your guess is as good as mine
+
+# Want different results each time? Use dynamic imports!
+from wishful.dynamic.jokes import programming_joke
+
+print(programming_joke())  # New joke on every import 🎲
 print(parse_fuzzy_date("next Tuesday"))  # Your guess is as good as mine
 ```
 
@@ -281,11 +379,15 @@ wishful/
 │   ├── __main__.py       # CLI interface
 │   ├── config.py         # Configuration
 │   ├── cache/            # Cache management
-│   ├── core/             # Import hooks
+│   ├── core/             # Import hooks & discovery
 │   ├── llm/              # LLM integration
+│   ├── types/            # Type registry system
 │   └── safety/           # Safety validation
-├── tests/                # Test suite
+├── tests/                # Test suite (83 tests, 80% coverage)
 ├── examples/             # Usage examples
+│   ├── 07_typed_outputs.py    # Type registry showcase
+│   ├── 08_dynamic_vs_static.py # Static vs dynamic modes
+│   └── 09_context_shenanigans.py # Context discovery
 └── pyproject.toml        # Project config
 ```
 
@@ -294,6 +396,12 @@ wishful/
 ## 🤔 FAQ (Frequently Asked Wishes)
 
 **Q: Is this production-ready?**  
+
+**Q: Can I make the LLM follow a specific style?**  
+A: Yes! Use docstrings in `@wishful.type` decorated classes. Want Yoda-speak? Add `"""Written by master yoda from star wars."""` — the LLM will actually do it.
+
+**Q: Do type hints and Pydantic constraints actually work?**  
+A: Surprisingly, yes! Field constraints like `min_length=10` or `gt=0` are serialized and sent to the LLM, which respects them.
 A: Define "production." 🙃
 
 **Q: What if the LLM generates bad code?**  

@@ -8,6 +8,8 @@ from pathlib import Path
 from textwrap import dedent
 from typing import Iterable, List, Sequence
 
+from wishful.types import get_all_type_schemas, get_output_type_for_function
+
 # Default radius for surrounding-context capture; configurable via env + setter.
 _context_radius = int(os.getenv("WISHFUL_CONTEXT_RADIUS", "3"))
 
@@ -108,7 +110,21 @@ def discover(fullname: str, runtime_context: dict | None = None) -> ImportContex
             continue
 
         context = _build_context_snippets(filename, lineno, functions)
-        return ImportContext(functions=functions, context=context)
+        
+        # Fetch type information from registry
+        type_schemas = get_all_type_schemas()
+        function_output_types = {}
+        for func in functions:
+            output_type = get_output_type_for_function(func)
+            if output_type:
+                function_output_types[func] = output_type
+        
+        return ImportContext(
+            functions=functions,
+            context=context,
+            type_schemas=type_schemas,
+            function_output_types=function_output_types,
+        )
 
     return ImportContext(functions=[], context=None)
 

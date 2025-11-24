@@ -17,6 +17,12 @@ If you only remember one thing: **this is a _uv‑managed_ project — always us
 - **LLM access:** real generation uses `litellm` and environment variables; tests are designed to run **without network**.
 - **Safety first:** generated code is statically checked; do not weaken safety rules without updating tests and documentation.
 - **Tests are your contract:** before and after changes, run the relevant `pytest` suite via `uv`.
+- **Test-Driven Development (TDD) Process:**
+  1. **Before implementation:** Run all tests with coverage: `uv run pytest --cov=wishful tests/`
+  2. **Design new tests:** Write tests for the new feature/fix before implementing
+  3. **Implement:** Write the actual code to make tests pass
+  4. **Verify:** Run tests again, fix issues until all green
+  5. **Coverage gate:** Ensure new global coverage is not less than before
 
 ---
 
@@ -40,8 +46,8 @@ uv sync
 
 This reads `pyproject.toml` and `uv.lock`, creates a virtual env, and installs:
 
-- Runtime deps: `litellm`, `rich`, `python-dotenv`
-- Dev deps: `pytest` (and anything else added via `uv add --dev`)
+- Runtime deps: `litellm`, `rich`, `python-dotenv`, `pydantic`
+- Dev deps: `pytest`, `pytest-cov`, `coverage`, `mypy`, `ruff`, `bandit`, `radon`
 
 ### Running commands (always via `uv run`)
 
@@ -133,8 +139,8 @@ From the root:
 - `pyproject.toml`  
   - Project metadata: name, version, description.
   - `requires-python = ">=3.12"`.
-  - Runtime deps: `litellm`, `rich`, `python-dotenv`.
-  - Dev deps under `[dependency-groups].dev`: `pytest`.
+- Runtime deps: `litellm`, `rich`, `python-dotenv`, `pydantic`
+- Dev deps under `[dependency-groups].dev`: `pytest`, `pytest-cov`, `coverage`, `mypy`, `ruff`, `bandit`, `radon`
   - Build system uses `uv_build` as backend.
 
 - `uv.lock`  
@@ -198,6 +204,7 @@ From the root:
   - `00_quick_start.py` through `06_omg_why.py` – basic usage patterns.
   - `07_typed_outputs.py` – demonstrates type registry with Pydantic, dataclasses, TypedDict.
   - `08_dynamic_vs_static.py` – shows difference between static (cached) and dynamic (runtime-aware) namespaces.
+  - `09_context_shenanigans.py` – demonstrates context discovery and import-site hints.
 
 - `docs/ideas/advanced_context_discovery.md`
   - Design/brainstorm document for richer context discovery strategies.
@@ -225,7 +232,9 @@ Understanding the import pipeline is the most important conceptual model for thi
    - `discover()` walks the Python stack to find the import site:
      - Parses the import statement into requested symbol names (e.g. `extract_emails`).
      - Captures lines around the import, plus call-site snippets elsewhere in the file, within a configurable radius (`WISHFUL_CONTEXT_RADIUS` or `wishful.set_context_radius`).
-   - Returns an `ImportContext(functions=[...], context=str | None)`.
+     - **Fetches registered type schemas** from `wishful.types.get_all_type_schemas()`.
+     - **Fetches function output type bindings** via `wishful.types.get_output_type_for_function()` for each requested function.
+   - Returns an `ImportContext(functions=[...], context=str | None, type_schemas=dict, function_output_types=dict)`.
 
 4. **Cache check and optional LLM generation**
    - Loader queries `cache.read_cached(fullname)`:
@@ -323,6 +332,7 @@ from dataclasses import dataclass
 @wishful.type
 @dataclass
 class Book:
+    """A book with title, author, and year."""
     title: str
     author: str
     year: int
@@ -334,6 +344,7 @@ Binding types to specific function outputs:
 @wishful.type(output_for="parse_user_data")
 @dataclass
 class UserProfile:
+    """User profile with name, email, and age."""
     name: str
     email: str
     age: int
@@ -345,11 +356,27 @@ Multiple functions sharing a type:
 from typing import TypedDict
 
 class ProductInfo(TypedDict):
+    """Product information."""
     name: str
     price: float
 
 wishful.type(ProductInfo, output_for=["parse_product", "create_product"])
 ```
+
+Pydantic models with Field constraints and docstring-driven behavior:
+
+```python
+from pydantic import BaseModel, Field
+
+@wishful.type
+class ProjectPlan(BaseModel):
+    """Project plan written by master yoda from star wars."""
+    project_brief: str
+    milestones: list[str] = Field(description="list of milestones", min_length=10)
+    budget: float = Field(gt=0, description="project budget in USD")
+```
+
+The LLM will respect both Field constraints (min_length=10, gt=0) AND the docstring style (generates text in Yoda-speak).
 
 ### How It Works
 
@@ -360,10 +387,16 @@ wishful.type(ProductInfo, output_for=["parse_product", "create_product"])
 
 ### Implementation Details
 
-- `TypeRegistry._serialize_pydantic()` – extracts Pydantic model fields and types
-- `TypeRegistry._serialize_dataclass()` – generates dataclass definitions
-- `TypeRegistry._serialize_typed_dict()` – formats TypedDict specifications
+- `TypeRegistry._serialize_pydantic()` – extracts Pydantic model fields and types, **includes docstrings**
+  - `_build_field_args()` – extracts Pydantic v2 Field constraints from metadata:
+    - Parses `field_info.metadata` list for constraint objects: `MinLen`, `MaxLen`, `Gt`, `Ge`, `Lt`, `Le`
+    - Extracts `pattern` from `_PydanticGeneralMetadata` objects
+    - Supports both Pydantic v1 (direct attributes) and v2 (metadata list) constraint storage
+    - Serializes constraints into `Field(description='...', min_length=10, ...)` format
+- `TypeRegistry._serialize_dataclass()` – generates dataclass definitions, **includes docstrings**
+- `TypeRegistry._serialize_typed_dict()` – formats TypedDict specifications, **includes docstrings**
 - Type schemas are passed to `generate_module_code()` as `type_schemas` and `function_output_types`
+- **Docstrings influence LLM behavior**: The docstring text (e.g., "Project plan written by master yoda from star wars") is included in the serialized type definition and affects how the LLM generates content (tone, style, domain-specific language)
 - See `examples/07_typed_outputs.py` for comprehensive usage examples
 - See `tests/test_types.py` for 30 tests covering all scenarios
 
@@ -429,7 +462,8 @@ The only place that calls the LLM is `src/wishful/llm/client.py`.
 - `prompts.build_messages(module, functions, context, type_schemas, function_output_types)`:
   - `system` message:
     - Instructs the model to emit **only executable Python code**, no markdown fences.
-    - Encourages simple, readable, standard‑library‑only code.
+    - Encourages simple, readable code.
+    - Explicitly states "You may use any Python libraries available in the environment" (Pydantic, requests, etc.).
     - Explicitly discourages network, filesystem writes, subprocess, shell execution.
     - **Includes registered type schemas** when available, formatted as Python class definitions.
     - **Specifies output types** for specific functions when registered via `@wishful.type(output_for=...)`.

@@ -16,7 +16,11 @@ def build_messages(
 
     # Include type schemas if available
     if type_schemas:
-        user_parts.append("Available type definitions:")
+        user_parts.append(
+            "Type definitions to include in the module:\n"
+            "(Copy these type definitions directly into the generated code. "
+            "Do NOT import them from other modules.)\n"
+        )
         for type_name, schema in type_schemas.items():
             user_parts.append(f"\n{schema}\n")
 
