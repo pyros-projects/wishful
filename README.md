@@ -1,4 +1,8 @@
-# wishful 🪄
+
+
+<p align="center">
+  <img alt="Wishful Banner" src="docs-site/src/content/imgs/wishful_logo (5).jpg" width="800">
+</p>
 
 [![PyPI version](https://badge.fury.io/py/wishful.svg)](https://badge.fury.io/py/wishful)
 [![Python 3.12+](https://img.shields.io/badge/python-3.12+-blue.svg)](https://www.python.org/downloads/)
@@ -7,7 +11,9 @@
 [![Coverage](https://img.shields.io/badge/coverage-80%25-green.svg)](https://github.com/pyros-projects/wishful)
 [![Code style: ruff](https://img.shields.io/badge/code%20style-ruff-000000.svg)](https://github.com/astral-sh/ruff)
 
-> _"Code so good, you'd think it was wishful thinking"_
+# wishful 🪄
+
+> _"Import your wildest dreams"_
 
 Stop writing boilerplate. Start wishing for it instead.
 

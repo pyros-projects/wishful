@@ -1,59 +1,72 @@
 ---
 title: Quickstart
-description: From zero to “it runs” in under five minutes.
+description: From “pip install” to your first cached wish.
 ---
 
-## 1) Prereqs
+## 1) Install wishful
 
-- Python 3.12+
-- Node 18+ (only if you’re building this doc site; not needed to use wishful)
-- `uv` installed globally (`curl -LsSf https://astral.sh/uv/install.sh | sh`)
-
-## 2) Sync the project
+Add wishful to your project like any other library:
 
 ```bash
-uv sync
+pip install wishful
 ```
 
-This installs the runtime + dev dependencies into `.venv` based on `uv.lock`.
+wishful targets Python 3.12+. It uses [`litellm`](https://github.com/BerriAI/litellm),
+so any provider it supports will work here too.
+
+## 2) Point it at an LLM
+
+Configure your provider with the usual environment variables. For example, with OpenAI:
+
+```bash
+export OPENAI_API_KEY=...
+export DEFAULT_MODEL=gpt-4.1
+```
+
+Or with Azure OpenAI:
+
+```bash
+export AZURE_API_KEY=...
+export AZURE_API_BASE=https://<your-endpoint>.openai.azure.com/
+export AZURE_API_VERSION=2025-04-01-preview
+export DEFAULT_MODEL=azure/gpt-4.1
+```
+
+You can also set `WISHFUL_MODEL` instead of `DEFAULT_MODEL` if you prefer.
 
 ## 3) Your first wish
 
-```bash
-uv run python - <<'PY'
-import wishful
+Drop this into a scratch file or a REPL:
 
-# Use the fake LLM so this runs offline/deterministically
-import os
-os.environ["WISHFUL_FAKE_LLM"] = "1"
+```python
+from wishful.static.text import extract_emails
 
-from wishful.static.text import meaning_of_life
-
-print("The meaning is:", meaning_of_life())
-PY
+raw = "Contact us at team@example.com or sales@demo.dev"
+print(extract_emails(raw))
 ```
 
-What happens:
-- `wishful` installs its import hook.
-- The first import triggers generation; in fake mode you get a stub that returns inputs (or a friendly constant).
-- The generated module is cached under `.wishful/`.
+Run it once.
 
-## 4) Run the test suite
+If you open the new `.wishful/text.py` file, you&apos;ll see real Python code that wishful
+generated, validated and cached for you.
 
-```bash
-uv run pytest
-```
+**A‑ha moment:** the function you imported didn&apos;t exist anywhere in your repo — the import
+itself was the spec.
 
-All tests are network-free by design.
+## 4) Optional: fake LLM mode
 
-## 5) Clean up
+For CI, demos, or offline experiments, flip on stubbed generation:
 
 ```bash
-uv run python - <<'PY'
-import wishful
-wishful.clear_cache()
-print(wishful.inspect_cache())  # should be empty
-PY
+export WISHFUL_FAKE_LLM=1
+python your_script.py
 ```
 
-That’s it. For deeper understanding, jump to [How it works](/how-it-works).
+In fake mode, wishful returns deterministic stub implementations instead of
+calling a real model. The test suite uses this mode; your project can too.
+
+## 5) Next steps
+
+- Curious about the magic under the hood? Read [How it works](/how-it-works).
+- Want the type registry and Yoda-speak examples? Head to [Types](/types).
+- Hacking on wishful itself? See [Contributing](/contributing) for the `uv`‑powered dev loop.
