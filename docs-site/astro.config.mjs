@@ -2,7 +2,8 @@ import { defineConfig } from 'astro/config';
 import starlight from '@astrojs/starlight';
 
 export default defineConfig({
-  site: 'https://wishful.local',
+  site: 'https://pyros-projects.github.io',
+  base: '/wishful',
   integrations: [
     starlight({
       title: 'wishful',
