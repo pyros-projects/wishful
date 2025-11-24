@@ -7,6 +7,10 @@ export default defineConfig({
     starlight({
       title: 'wishful',
       description: 'LLM-generated imports that stay playful.',
+      logo: {
+        src: './src/content/imgs/wishful_logo (5).jpg',
+        alt: 'wishful – magic wand and Python swirl'
+      },
       sidebar: [
         { label: 'Welcome', link: '/' },
         { label: 'Quickstart', link: '/quickstart' },

@@ -16,6 +16,9 @@
   --wishful-hero-border: rgba(148, 163, 184, 0.45);
   --wishful-hero-shadow: 0 26px 80px rgba(15, 23, 42, 0.95);
   --wishful-card-border: rgba(148, 163, 184, 0.35);
+
+  /* Let the content column breathe a bit more on large screens */
+  --sl-content-width: 72rem;
 }
 
 :root[data-theme='light'] {
@@ -177,6 +180,9 @@
   grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
   gap: 1.25rem;
   margin-block: 2rem 0.5rem;
+  max-width: 72rem;
+  margin-inline: auto;
+  align-items: stretch;
 }
 
 .aha-card {
@@ -215,6 +221,19 @@
   border-radius: 0.75rem;
   padding: 1rem;
   border: 1px solid rgba(15, 23, 42, 0.9);
+}
+
+/* Widen the main content panel between sidebar and ToC */
+main .content-panel {
+  max-width: min(72rem, 100%);
+  margin-inline: auto;
+  padding-inline: clamp(1rem, 3vw, 2.75rem);
+}
+
+/* Ensure active sidebar item is legible on the accent background */
+nav[aria-label='Main'] a[aria-current='page'] {
+  color: #020617 !important;
+  font-weight: 600;
 }
 
 @media (max-width: 900px) {
