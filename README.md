@@ -4,16 +4,19 @@
   <img alt="Wishful Banner" src="docs-site/src/content/imgs/wishful_logo (5).jpg" width="800">
 </p>
 
-[![PyPI version](https://badge.fury.io/py/wishful.svg)](https://badge.fury.io/py/wishful)
-[![Python 3.12+](https://img.shields.io/badge/python-3.12+-blue.svg)](https://www.python.org/downloads/)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![Tests](https://img.shields.io/badge/tests-83%20passed-brightgreen.svg)](https://github.com/pyros-projects/wishful)
-[![Coverage](https://img.shields.io/badge/coverage-80%25-green.svg)](https://github.com/pyros-projects/wishful)
-[![Code style: ruff](https://img.shields.io/badge/code%20style-ruff-000000.svg)](https://github.com/astral-sh/ruff)
+<p align="center">
+  <a href="https://badge.fury.io/py/wishful"><img src="https://badge.fury.io/py/wishful.svg" alt="PyPI version"></a>
+  <a href="https://www.python.org/downloads/"><img src="https://img.shields.io/badge/python-3.12+-blue.svg" alt="Python 3.12+"></a>
+  <a href="https://opensource.org/licenses/MIT"><img src="https://img.shields.io/badge/License-MIT-yellow.svg" alt="License: MIT"></a>
+  <a href="https://github.com/pyros-projects/wishful"><img src="https://img.shields.io/badge/tests-83%20passed-brightgreen.svg" alt="Tests"></a>
+  <a href="https://github.com/pyros-projects/wishful"><img src="https://img.shields.io/badge/coverage-80%25-green.svg" alt="Coverage"></a>
+  <a href="https://github.com/astral-sh/ruff"><img src="https://img.shields.io/badge/code%20style-ruff-000000.svg" alt="Code style: ruff"></a>
+</p>
 
-# wishful 🪄
+<p align="center">
+  <em>"Import your wildest dreams"</em>
+</p>
 
-> _"Import your wildest dreams"_
 
 Stop writing boilerplate. Start wishing for it instead.
 
