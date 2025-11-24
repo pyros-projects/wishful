@@ -1,8 +1,6 @@
 import importlib
 import sys
 
-import pytest
-
 from wishful import regenerate
 from wishful.cache import manager
 from wishful.core import loader
@@ -18,7 +16,7 @@ def _reset_modules():
 def test_generates_and_caches_on_first_import(monkeypatch):
     call_count = {"n": 0}
 
-    def fake_generate(module, functions, context):
+    def fake_generate(module, functions, context, **kwargs):
         call_count["n"] += 1
         assert module == "wishful.utils"
         # ensure discovery passes function names through
@@ -39,7 +37,7 @@ def test_generates_and_caches_on_first_import(monkeypatch):
 
 def test_reimport_uses_cache(monkeypatch):
     # First import to populate cache
-    def first_generate(module, functions, context):
+    def first_generate(module, functions, context, **kwargs):
         return "def meaning_of_life():\n    return 84\n"
 
     monkeypatch.setattr(loader, "generate_module_code", first_generate)
@@ -60,7 +58,7 @@ def test_reimport_uses_cache(monkeypatch):
 
 def test_regenerate_forces_new_generation(monkeypatch):
     # Seed cache with one value
-    def gen_one(module, functions, context):
+    def gen_one(module, functions, context, **kwargs):
         return "def answer():\n    return 1\n"
 
     monkeypatch.setattr(loader, "generate_module_code", gen_one)
@@ -70,7 +68,7 @@ def test_regenerate_forces_new_generation(monkeypatch):
     assert answer() == 1
 
     # Change generator and regenerate
-    def gen_two(module, functions, context):
+    def gen_two(module, functions, context, **kwargs):
         return "def answer():\n    return 2\n"
 
     monkeypatch.setattr(loader, "generate_module_code", gen_two)
@@ -85,7 +83,7 @@ def test_missing_symbol_in_cache_triggers_regeneration(monkeypatch):
 
     manager.write_cached("wishful.broken", "def other():\n    return 'nope'\n")
 
-    def gen_fixed(module, functions, context):
+    def gen_fixed(module, functions, context, **kwargs):
         assert "expect_me" in functions
         return "def expect_me():\n    return 'fixed'\n"
 
@@ -100,7 +98,7 @@ def test_missing_symbol_in_cache_triggers_regeneration(monkeypatch):
 def test_dynamic_getattr_generates_additional_functions(monkeypatch):
     call_count = {"n": 0}
 
-    def gen(module, functions, context):
+    def gen(module, functions, context, **kwargs):
         call_count["n"] += 1
         if call_count["n"] == 1:
             assert functions == ["foo"]
@@ -129,7 +127,7 @@ def test_dynamic_getattr_generates_additional_functions(monkeypatch):
 def test_multiple_imports_preserve_existing(monkeypatch):
     call_count = {"n": 0}
 
-    def gen(module, functions, context):
+    def gen(module, functions, context, **kwargs):
         call_count["n"] += 1
         body = []
         for name in sorted(set(functions)):

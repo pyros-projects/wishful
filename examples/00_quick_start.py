@@ -74,6 +74,7 @@ def example_cache_ops(tmp_dir: Path):
     wishful.configure(cache_dir=tmp_dir)
     from wishful.utils import hello_world
 
+    print("hello_world():", hello_world())
     print("cached files:", wishful.inspect_cache())
     wishful.regenerate("wishful.utils")
     print("after regenerate:", wishful.inspect_cache())

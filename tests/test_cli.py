@@ -1,7 +1,6 @@
 """Tests for the CLI interface."""
 
 import sys
-from io import StringIO
 
 import pytest
 

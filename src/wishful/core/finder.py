@@ -2,9 +2,7 @@ from __future__ import annotations
 
 import importlib.abc
 import importlib.util
-import sys
 from pathlib import Path
-from typing import Optional
 
 from wishful.core.loader import MagicLoader, MagicPackageLoader
 
@@ -15,24 +13,25 @@ MAGIC_NAMESPACE = "wishful"
 class MagicFinder(importlib.abc.MetaPathFinder):
     """Intercept imports for the `wishful.*` namespace."""
 
-    def find_spec(self, fullname: str, path, target=None):
+    def find_spec(self, fullname: str, path, target=None):  # type: ignore[override]
         if not fullname.startswith(MAGIC_NAMESPACE):
             return None
-        
-        # Check if this module actually exists on disk as part of our package
-        # If it does, let the default import mechanism handle it
-        parts = fullname.split('.')
-        if len(parts) >= 2:
-            # Check for our internal package modules
-            module_file = Path(__file__).parent.parent / parts[1]
-            if module_file.exists() or (module_file.with_suffix('.py')).exists():
-                return None
+
+        if _is_internal_module(fullname):
+            return None
 
         if fullname == MAGIC_NAMESPACE:
             return importlib.util.spec_from_loader(fullname, MagicPackageLoader(), is_package=True)
 
-        loader = MagicLoader(fullname)
-        return importlib.util.spec_from_loader(fullname, loader, is_package=False)
+        return importlib.util.spec_from_loader(fullname, MagicLoader(fullname), is_package=False)
+
+
+def _is_internal_module(fullname: str) -> bool:
+    parts = fullname.split('.')
+    if len(parts) < 2:
+        return False
+    module_file = Path(__file__).parent.parent / parts[1]
+    return module_file.exists() or module_file.with_suffix('.py').exists()
 
 
 def install() -> None:

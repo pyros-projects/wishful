@@ -12,6 +12,7 @@ from wishful.core.discovery import set_context_radius as _set_context_radius
 from wishful.core.finder import install as install_finder
 from wishful.llm.client import GenerationError
 from wishful.safety.validator import SecurityError
+from wishful.types import type as type_decorator
 
 # Install on import so `import magic.xyz` is intercepted immediately.
 install_finder()
@@ -22,9 +23,15 @@ __all__ = [
     "inspect_cache",
     "regenerate",
     "set_context_radius",
+    "settings",
+    "reset_defaults",
     "SecurityError",
     "GenerationError",
+    "type",
 ]
+
+# Alias for cleaner API
+type = type_decorator
 
 
 def clear_cache() -> None:

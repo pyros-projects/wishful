@@ -1,9 +1,6 @@
 """Tests for configuration and settings."""
 
-import os
 from pathlib import Path
-
-import pytest
 
 from wishful.config import Settings, configure, reset_defaults, settings
 
@@ -18,6 +15,7 @@ def test_default_settings():
     assert s.spinner is True
     assert s.max_tokens == 4096
     assert s.temperature == 1
+    assert "Python code generator" in s.system_prompt
 
 
 def test_configure_model():
@@ -42,11 +40,13 @@ def test_configure_multiple_settings():
         review=True,
         temperature=0.7,
         max_tokens=1000,
+        system_prompt="be concise",
     )
     assert settings.spinner is True
     assert settings.review is True
     assert settings.temperature == 0.7
     assert settings.max_tokens == 1000
+    assert settings.system_prompt == "be concise"
     # Note: reset_wishful fixture will restore settings after test
 
 

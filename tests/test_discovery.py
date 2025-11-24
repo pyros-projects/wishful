@@ -1,7 +1,5 @@
 """Tests for context discovery and LLM prompt generation."""
 
-import pytest
-
 from wishful.core.discovery import ImportContext, _parse_imported_names, discover
 from wishful.core import discovery
 

@@ -1,13 +1,8 @@
 """Tests for LLM client and prompt generation."""
 
-import importlib
-import os
-
-import pytest
-
-from wishful.llm import client
-from wishful.llm.client import GenerationError, _fake_response, generate_module_code
+from wishful.llm.client import _fake_response
 from wishful.llm.prompts import build_messages, strip_code_fences
+from wishful.config import configure, reset_defaults
 
 
 def test_build_messages_basic():
@@ -26,6 +21,49 @@ def test_build_messages_with_context():
     context = "# desired: parse JSON safely"
     messages = build_messages("wishful.data", ["parse_json"], context)
     assert context in messages[1]["content"]
+
+
+def test_build_messages_custom_system_prompt():
+    """System prompt should come from settings/configure."""
+    custom = "Custom system prompt for tests."
+    configure(system_prompt=custom)
+    messages = build_messages("wishful.data", ["parse_json"], None)
+    assert messages[0]["content"] == custom
+    reset_defaults()
+
+
+def test_build_messages_with_type_schemas():
+    """Test building messages with type schemas."""
+    type_schemas = {
+        "UserProfile": "class UserProfile(BaseModel):\n    name: str\n    email: str"
+    }
+    messages = build_messages("wishful.users", ["create_user"], None, type_schemas=type_schemas)
+    assert "UserProfile" in messages[1]["content"]
+    assert "BaseModel" in messages[1]["content"]
+
+
+def test_build_messages_with_function_output_types():
+    """Test building messages with function output types."""
+    function_output_types = {"create_user": "UserProfile"}
+    messages = build_messages("wishful.users", ["create_user"], None, function_output_types=function_output_types)
+    assert "create_user(...) -> UserProfile" in messages[1]["content"]
+
+
+def test_build_messages_with_both_types_and_outputs():
+    """Test building messages with both type schemas and output types."""
+    type_schemas = {
+        "UserProfile": "class UserProfile(BaseModel):\n    name: str"
+    }
+    function_output_types = {"create_user": "UserProfile"}
+    messages = build_messages(
+        "wishful.users", 
+        ["create_user"], 
+        None, 
+        type_schemas=type_schemas,
+        function_output_types=function_output_types
+    )
+    assert "UserProfile" in messages[1]["content"]
+    assert "create_user(...) -> UserProfile" in messages[1]["content"]
 
 
 def test_strip_code_fences_with_fences():

@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import os
-from typing import List, Sequence
+from typing import Sequence
 
 import litellm
 
@@ -25,15 +25,37 @@ def _fake_response(functions: Sequence[str]) -> str:
     return "\n\n".join(body)
 
 
-def generate_module_code(module: str, functions: Sequence[str], context: str | None) -> str:
+def generate_module_code(
+    module: str,
+    functions: Sequence[str],
+    context: str | None,
+    type_schemas: dict[str, str] | None = None,
+    function_output_types: dict[str, str] | None = None,
+) -> str:
     """Call the LLM (or fake stub) to generate module source code."""
 
     if _FAKE_MODE:
         return _fake_response(functions)
 
-    messages = build_messages(module, functions, context)
+    response = _call_llm(
+        module, functions, context, type_schemas, function_output_types
+    )
+    content = _extract_content(response)
+    return strip_code_fences(content).strip()
+
+
+def _call_llm(
+    module: str,
+    functions: Sequence[str],
+    context: str | None,
+    type_schemas: dict[str, str] | None = None,
+    function_output_types: dict[str, str] | None = None,
+):
+    messages = build_messages(
+        module, functions, context, type_schemas, function_output_types
+    )
     try:
-        response = litellm.completion(
+        return litellm.completion(
             model=settings.model,
             messages=messages,
             temperature=settings.temperature,
@@ -42,6 +64,8 @@ def generate_module_code(module: str, functions: Sequence[str], context: str | N
     except Exception as exc:  # pragma: no cover - network path not executed in tests
         raise GenerationError(f"LLM call failed: {exc}") from exc
 
+
+def _extract_content(response) -> str:
     try:
         content = response["choices"][0]["message"]["content"]
     except Exception as exc:  # pragma: no cover
@@ -49,5 +73,4 @@ def generate_module_code(module: str, functions: Sequence[str], context: str | N
 
     if not content or not content.strip():
         raise GenerationError("LLM returned empty content")
-
-    return strip_code_fences(content).strip()
+    return content
