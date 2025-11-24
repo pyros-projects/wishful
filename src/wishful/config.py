@@ -3,6 +3,7 @@ from __future__ import annotations
 import os
 from dataclasses import dataclass, field
 from pathlib import Path
+from textwrap import dedent
 from typing import Optional
 
 from dotenv import load_dotenv
@@ -13,6 +14,19 @@ load_dotenv()
 
 
 _DEFAULT_MODEL = os.getenv("DEFAULT_MODEL", os.getenv("WISHFUL_MODEL", "azure/gpt-4.1"))
+_DEFAULT_SYSTEM_PROMPT = os.getenv(
+    "WISHFUL_SYSTEM_PROMPT",
+    dedent(
+        """
+        You are a Python code generator. Output ONLY executable Python code.
+        - Do not wrap code in markdown fences.
+        - You may use any Python libraries available in the environment.
+        - Prefer simple, readable implementations.
+        - Avoid network calls, filesystem writes, subprocess, or shell execution.
+        - Include docstrings and type hints where helpful.
+        """
+    ).strip(),
+)
 
 
 @dataclass
@@ -31,6 +45,7 @@ class Settings:
     spinner: bool = os.getenv("WISHFUL_SPINNER", "1") != "0"
     max_tokens: int = int(os.getenv("WISHFUL_MAX_TOKENS", "4096"))
     temperature: float = float(os.getenv("WISHFUL_TEMPERATURE", "1"))
+    system_prompt: str = _DEFAULT_SYSTEM_PROMPT
 
     def copy(self) -> "Settings":
         return Settings(
@@ -42,6 +57,7 @@ class Settings:
             spinner=self.spinner,
             max_tokens=self.max_tokens,
             temperature=self.temperature,
+            system_prompt=self.system_prompt,
         )
 
 
@@ -58,6 +74,7 @@ def configure(
     spinner: Optional[bool] = None,
     temperature: Optional[float] = None,
     max_tokens: Optional[int] = None,
+    system_prompt: Optional[str] = None,
 ) -> None:
     """Update global settings in-place.
 
@@ -65,22 +82,21 @@ def configure(
     settings. Accepts both strings and :class:`pathlib.Path` for `cache_dir`.
     """
 
-    if model is not None:
-        settings.model = model
-    if cache_dir is not None:
-        settings.cache_dir = Path(cache_dir)
-    if review is not None:
-        settings.review = review
-    if debug is not None:
-        settings.debug = debug
-    if allow_unsafe is not None:
-        settings.allow_unsafe = allow_unsafe
-    if spinner is not None:
-        settings.spinner = spinner
-    if temperature is not None:
-        settings.temperature = temperature
-    if max_tokens is not None:
-        settings.max_tokens = max_tokens
+    updates = {
+        "model": model,
+        "cache_dir": Path(cache_dir) if cache_dir is not None else None,
+        "review": review,
+        "debug": debug,
+        "allow_unsafe": allow_unsafe,
+        "spinner": spinner,
+        "temperature": temperature,
+        "max_tokens": max_tokens,
+        "system_prompt": system_prompt,
+    }
+
+    for attr, value in updates.items():
+        if value is not None:
+            setattr(settings, attr, value)
 
 
 def reset_defaults() -> None:
@@ -96,3 +112,4 @@ def reset_defaults() -> None:
     settings.spinner = defaults.spinner
     settings.max_tokens = defaults.max_tokens
     settings.temperature = defaults.temperature
+    settings.system_prompt = defaults.system_prompt

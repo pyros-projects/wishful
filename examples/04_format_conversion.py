@@ -4,7 +4,7 @@ This demonstrates generating utilities for converting between different file for
 """
 
 # Desired: convert CSV to JSON, JSON to XML, dict to query string
-from wishful.convert import csv_to_json, dict_to_query_string
+from wishful.static.convert import csv_to_json, dict_to_query_string
 
 csv_data = """name,age,city
 Alice,30,NYC

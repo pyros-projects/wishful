@@ -12,6 +12,7 @@ from wishful.core.discovery import set_context_radius as _set_context_radius
 from wishful.core.finder import install as install_finder
 from wishful.llm.client import GenerationError
 from wishful.safety.validator import SecurityError
+from wishful.types import type as type_decorator
 
 # Install on import so `import magic.xyz` is intercepted immediately.
 install_finder()
@@ -22,9 +23,15 @@ __all__ = [
     "inspect_cache",
     "regenerate",
     "set_context_radius",
+    "settings",
+    "reset_defaults",
     "SecurityError",
     "GenerationError",
+    "type",
 ]
+
+# Alias for cleaner API
+type = type_decorator
 
 
 def clear_cache() -> None:
@@ -44,10 +51,16 @@ def inspect_cache() -> List[str]:
 
 
 def regenerate(module_name: str) -> None:
-    """Force regeneration of a module on next import."""
-
+    """Force regeneration of a module on next import.
+    
+    Accepts module names with or without the wishful.static prefix.
+    Example: regenerate('users') or regenerate('wishful.static.users')
+    """
+    # Ensure it has the wishful prefix
     if not module_name.startswith("wishful"):
-        module_name = f"wishful.{module_name}"
+        # Default to static namespace for backward compatibility
+        module_name = f"wishful.static.{module_name}"
+    
     cache.delete_cached(module_name)
     sys.modules.pop(module_name, None)
     importlib.invalidate_caches()

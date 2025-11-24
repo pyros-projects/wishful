@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import ast
-from typing import Iterable, Set
+from typing import Iterable
 
 
 class SecurityError(ImportError):
@@ -10,15 +10,110 @@ class SecurityError(ImportError):
 
 _FORBIDDEN_IMPORTS = {"os", "subprocess", "sys"}
 _FORBIDDEN_CALLS = {"eval", "exec"}
-_FORBIDDEN_FUNCTIONS = {"open"}
+_WRITE_MODES = {"w", "a", "+"}
 
 
-def _collect_names(node: ast.AST) -> Set[str]:
-    names = set()
-    for child in ast.walk(node):
-        if isinstance(child, ast.Name):
-            names.add(child.id)
-    return names
+def _parse_source(source: str) -> ast.AST:
+    try:
+        return ast.parse(source)
+    except SyntaxError as exc:
+        raise ImportError(f"Generated code has syntax error: {exc}") from exc
+
+
+def _check_imports(tree: ast.AST) -> None:
+    _validate_import_names(list(_iter_import_names(tree)))
+
+
+def _iter_import_names(tree: ast.AST):
+    yield from _import_names(tree)
+    yield from _importfrom_names(tree)
+
+
+def _import_names(tree: ast.AST):
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            for alias in node.names:
+                yield alias.name
+
+
+def _importfrom_names(tree: ast.AST):
+    for node in ast.walk(tree):
+        if isinstance(node, ast.ImportFrom) and node.module:
+            yield node.module
+
+
+def _validate_import_names(names: Iterable[str]) -> None:
+    for name in names:
+        if name.split(".")[0] in _FORBIDDEN_IMPORTS:
+            raise SecurityError(f"Forbidden import: {name}")
+
+
+def _check_calls(tree: ast.AST) -> None:
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Call):
+            continue
+        if isinstance(node.func, ast.Name):
+            _check_named_call(node.func.id, node)
+        elif isinstance(node.func, ast.Attribute):
+            _check_attribute_call(node.func)
+
+
+def _check_named_call(func_name: str, call: ast.Call) -> None:
+    if func_name in _FORBIDDEN_CALLS:
+        raise SecurityError(f"Forbidden call: {func_name}()")
+    if func_name == "open":
+        _validate_open_call(call)
+
+
+def _check_attribute_call(attr: ast.Attribute) -> None:
+    dotted = _resolve_attribute_name(attr)
+    if dotted.startswith("os.") or dotted.startswith("subprocess."):
+        raise SecurityError(f"Forbidden call: {dotted}()")
+
+
+def _resolve_attribute_name(attr: ast.Attribute) -> str:
+    parts = []
+    current: ast.AST | None = attr
+    while isinstance(current, ast.Attribute):
+        parts.append(current.attr)
+        current = current.value
+    if isinstance(current, ast.Name):
+        parts.append(current.id)
+    return ".".join(reversed(parts))
+
+
+def _validate_open_call(call: ast.Call) -> None:
+    mode_arg = _extract_open_mode(call)
+    if mode_arg and any(ch in mode_arg for ch in _WRITE_MODES):
+        raise SecurityError("open() in write/append mode is blocked")
+
+
+def _extract_open_mode(call: ast.Call) -> str | None:
+    positional = _extract_positional_mode(call)
+    if positional is not None:
+        return positional
+    return _extract_keyword_mode(call)
+
+
+def _extract_positional_mode(call: ast.Call) -> str | None:
+    if len(call.args) > 1 and isinstance(call.args[1], ast.Constant):
+        return str(call.args[1].value)
+    return None
+
+
+def _extract_keyword_mode(call: ast.Call) -> str | None:
+    for kw in call.keywords:
+        if kw.arg == "mode" and isinstance(kw.value, ast.Constant):
+            return str(kw.value.value)
+    return None
+
+
+def _check_forbidden_builtins(tree: ast.AST) -> None:
+    names = {node.id for node in ast.walk(tree) if isinstance(node, ast.Name)}
+    forbidden = names & _FORBIDDEN_CALLS
+    if forbidden:
+        joined = ", ".join(sorted(forbidden))
+        raise SecurityError(f"Forbidden builtins present: {joined}")
 
 
 def validate_code(source: str, *, allow_unsafe: bool = False) -> None:
@@ -31,52 +126,7 @@ def validate_code(source: str, *, allow_unsafe: bool = False) -> None:
     if allow_unsafe:
         return
 
-    try:
-        tree = ast.parse(source)
-    except SyntaxError as exc:  # surface errors early
-        raise ImportError(f"Generated code has syntax error: {exc}") from exc
-
-    for node in ast.walk(tree):
-        if isinstance(node, ast.Import):
-            for alias in node.names:
-                if alias.name.split(".")[0] in _FORBIDDEN_IMPORTS:
-                    raise SecurityError(f"Forbidden import: {alias.name}")
-        elif isinstance(node, ast.ImportFrom):
-            if node.module and node.module.split(".")[0] in _FORBIDDEN_IMPORTS:
-                raise SecurityError(f"Forbidden import: {node.module}")
-        elif isinstance(node, ast.Call):
-            if isinstance(node.func, ast.Name):
-                func_name = node.func.id
-                if func_name in _FORBIDDEN_CALLS:
-                    raise SecurityError(f"Forbidden call: {func_name}()")
-                if func_name == "open":
-                    # Evaluate mode argument safety (write modes contain 'w', 'a', '+').
-                    if node.args:
-                        first_arg = node.args[0]
-                        if isinstance(first_arg, ast.Constant) and isinstance(first_arg.value, str):
-                            mode_arg = None
-                            if len(node.args) > 1 and isinstance(node.args[1], ast.Constant):
-                                mode_arg = node.args[1].value
-                            elif node.keywords:
-                                for kw in node.keywords:
-                                    if kw.arg == "mode" and isinstance(kw.value, ast.Constant):
-                                        mode_arg = kw.value.value
-                            if mode_arg and any(ch in str(mode_arg) for ch in "wa+"):
-                                raise SecurityError("open() in write/append mode is blocked")
-            if isinstance(node.func, ast.Attribute):
-                # Block os.system / subprocess.call etc even if imported under alias.
-                attr_chain = []
-                current = node.func
-                while isinstance(current, ast.Attribute):
-                    attr_chain.append(current.attr)
-                    current = current.value
-                if isinstance(current, ast.Name):
-                    attr_chain.append(current.id)
-                    dotted = ".".join(reversed(attr_chain))
-                    if dotted.startswith("os.") or dotted.startswith("subprocess."):
-                        raise SecurityError(f"Forbidden call: {dotted}()")
-
-    # Additional rule: do not allow top-level exec/eval in any alias
-    names = _collect_names(tree)
-    if names & _FORBIDDEN_CALLS:
-        raise SecurityError(f"Forbidden builtins present: {', '.join(names & _FORBIDDEN_CALLS)}")
+    tree = _parse_source(source)
+    _check_imports(tree)
+    _check_calls(tree)
+    _check_forbidden_builtins(tree)

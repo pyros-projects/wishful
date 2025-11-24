@@ -17,6 +17,12 @@ If you only remember one thing: **this is a _uv‑managed_ project — always us
 - **LLM access:** real generation uses `litellm` and environment variables; tests are designed to run **without network**.
 - **Safety first:** generated code is statically checked; do not weaken safety rules without updating tests and documentation.
 - **Tests are your contract:** before and after changes, run the relevant `pytest` suite via `uv`.
+- **Test-Driven Development (TDD) Process:**
+  1. **Before implementation:** Run all tests with coverage: `uv run pytest --cov=wishful tests/`
+  2. **Design new tests:** Write tests for the new feature/fix before implementing
+  3. **Implement:** Write the actual code to make tests pass
+  4. **Verify:** Run tests again, fix issues until all green
+  5. **Coverage gate:** Ensure new global coverage is not less than before
 
 ---
 
@@ -40,8 +46,8 @@ uv sync
 
 This reads `pyproject.toml` and `uv.lock`, creates a virtual env, and installs:
 
-- Runtime deps: `litellm`, `rich`, `python-dotenv`
-- Dev deps: `pytest` (and anything else added via `uv add --dev`)
+- Runtime deps: `litellm`, `rich`, `python-dotenv`, `pydantic`
+- Dev deps: `pytest`, `pytest-cov`, `coverage`, `mypy`, `ruff`, `bandit`, `radon`
 
 ### Running commands (always via `uv run`)
 
@@ -90,15 +96,37 @@ If you find yourself about to type `python …` or `pytest …`, prepend `uv run
 **wishful** lets users write imports like:
 
 ```python
-from wishful.text import extract_emails
+from wishful.static.text import extract_emails
 ```
 
 and, on first import, an LLM generates the implementation on the fly. The generated module is cached as plain Python in a configurable directory (default `.wishful/`). Subsequent imports use the cache without calling the LLM again.
 
+### Namespace Architecture (Important!)
+
+The project uses **three distinct namespaces**:
+
+1. **`wishful.static.*`** — Cached generation (default behavior)
+   - Generated code is written to cache and reused on subsequent imports
+   - Optimized for performance and consistency
+   - Use for: utilities, parsers, validators, anything that doesn't need runtime context
+
+2. **`wishful.dynamic.*`** — Runtime-context-aware generation
+   - Regenerates on every import, capturing fresh runtime context each time
+   - Never uses cache (always calls LLM)
+   - Use for: creative content, context-sensitive functions, testing variations
+
+3. **`wishful.*` (internal)** — Protected internal modules
+   - Real package modules: `wishful.cache`, `wishful.config`, `wishful.types`, `wishful.core`, etc.
+   - Cannot be overridden by code generation
+   - Import these normally for internal API access
+
+**Critical for tests and examples:** Always use `wishful.static.*` or `wishful.dynamic.*` for generated modules, never bare `wishful.*` (which would conflict with internal modules).
+
 Key properties:
 
-- Uses a custom **import hook** (meta‑path finder + loader).
+- Uses a custom **import hook** (meta‑path finder + loader) with namespace routing.
 - **Context‑aware**: forwards nearby comments/code lines to the LLM as hints.
+- **Type-aware**: supports complex return types via `@wishful.type` decorator (see Type Registry section).
 - **Safety‑checked**: generated code is parsed and checked for obviously dangerous constructs.
 - **Cache‑backed**: generated modules live as `.py` files and can be edited or committed.
 
@@ -111,8 +139,8 @@ From the root:
 - `pyproject.toml`  
   - Project metadata: name, version, description.
   - `requires-python = ">=3.12"`.
-  - Runtime deps: `litellm`, `rich`, `python-dotenv`.
-  - Dev deps under `[dependency-groups].dev`: `pytest`.
+- Runtime deps: `litellm`, `rich`, `python-dotenv`, `pydantic`
+- Dev deps under `[dependency-groups].dev`: `pytest`, `pytest-cov`, `coverage`, `mypy`, `ruff`, `bandit`, `radon`
   - Build system uses `uv_build` as backend.
 
 - `uv.lock`  
@@ -131,15 +159,25 @@ From the root:
     - Provides `configure(**kwargs)` and `reset_defaults()` utilities.
   - `core/` – import mechanics
     - `__init__.py` – re‑exports `MagicFinder`, `MagicLoader`, `install`.
-    - `finder.py` – `MagicFinder` (meta‑path finder) that intercepts `wishful.*` imports and delegates to `MagicLoader` unless the module is part of the built‑in package.
+    - `finder.py` – `MagicFinder` (meta‑path finder) that intercepts `wishful.static.*` and `wishful.dynamic.*` imports, routes them to appropriate loaders, and protects internal `wishful.*` modules.
     - `loader.py` – `MagicLoader` and `MagicPackageLoader`:
-      - Handles cache lookup, LLM generation, dynamic regeneration when requested symbols are missing, and dynamic `__getattr__` for on‑demand symbols.
+      - Accepts `mode` parameter ("static" or "dynamic") to control caching behavior.
+      - Handles cache lookup (static only), LLM generation, dynamic regeneration when requested symbols are missing, and dynamic `__getattr__` for on‑demand symbols.
   - `cache/` – cache management
     - `manager.py` – cache path computation, read/write, clear, list.
+      - Strips `static`/`dynamic` namespace prefixes from cache paths so both use same cache file.
   - `llm/`
     - `client.py` – wraps `litellm` calls and exposes `generate_module_code`, `GenerationError`.
+    - Accepts `type_schemas` and `function_output_types` for type-aware generation.
     - `_FAKE_MODE` via `WISHFUL_FAKE_LLM=1` returns deterministic stubs (no network).
     - `prompts.py` – prompt construction (`build_messages`) and `strip_code_fences`.
+      - Formats type schemas and output types in system prompt for LLM.
+  - `types/` – type registry system
+    - `__init__.py` – exports `type` decorator and registry functions.
+    - `registry.py` – `TypeRegistry` class for registering and serializing complex types.
+      - Supports Pydantic models, dataclasses, TypedDict.
+      - `@wishful.type` decorator for registering types and binding to function outputs.
+      - Serializes type definitions to Python code for inclusion in LLM prompts.
   - `safety/`
     - `validator.py` – `validate_code(source, allow_unsafe)` plus `SecurityError`.
     - AST‑based checks for forbidden imports (`os`, `subprocess`, `sys`), forbidden calls (`eval`, `exec`, unsafe `open`, `os.system`, `subprocess.*`, etc.).
@@ -159,9 +197,14 @@ From the root:
     - `test_discovery.py` – context discovery helpers.
     - `test_llm.py` – LLM client and prompt utilities.
     - `test_safety.py` – security validator rules.
+    - `test_types.py` – type registry and serialization (30 tests).
+    - `test_namespaces.py` – static vs dynamic namespace behavior (6 tests).
 
 - `examples/`
-  - `00_quick_start.py` and others – small scripts demonstrating common usage patterns.
+  - `00_quick_start.py` through `06_omg_why.py` – basic usage patterns.
+  - `07_typed_outputs.py` – demonstrates type registry with Pydantic, dataclasses, TypedDict.
+  - `08_dynamic_vs_static.py` – shows difference between static (cached) and dynamic (runtime-aware) namespaces.
+  - `09_context_shenanigans.py` – demonstrates context discovery and import-site hints.
 
 - `docs/ideas/advanced_context_discovery.md`
   - Design/brainstorm document for richer context discovery strategies.
@@ -180,7 +223,8 @@ Understanding the import pipeline is the most important conceptual model for thi
    - `MagicFinder.find_spec(fullname, path, target)`:
      - Ignores non‑`wishful` modules.
      - If the module corresponds to an **internal** package module (real file under `src/wishful/…`), it returns `None` so normal import mechanisms handle it.
-     - For external dynamic modules (e.g. `wishful.text`, `wishful.dates`…), it returns a spec with `MagicLoader` and `is_package=False`.
+     - For `wishful.static.*` modules, it returns a spec with `MagicLoader(mode="static")`.
+     - For `wishful.dynamic.*` modules, it returns a spec with `MagicLoader(mode="dynamic")`.
      - For the root `wishful` namespace (when not resolved by the built‑in package), it can use `MagicPackageLoader`.
 
 3. **Context discovery**
@@ -188,14 +232,16 @@ Understanding the import pipeline is the most important conceptual model for thi
    - `discover()` walks the Python stack to find the import site:
      - Parses the import statement into requested symbol names (e.g. `extract_emails`).
      - Captures lines around the import, plus call-site snippets elsewhere in the file, within a configurable radius (`WISHFUL_CONTEXT_RADIUS` or `wishful.set_context_radius`).
-   - Returns an `ImportContext(functions=[...], context=str | None)`.
+     - **Fetches registered type schemas** from `wishful.types.get_all_type_schemas()`.
+     - **Fetches function output type bindings** via `wishful.types.get_output_type_for_function()` for each requested function.
+   - Returns an `ImportContext(functions=[...], context=str | None, type_schemas=dict, function_output_types=dict)`.
 
 4. **Cache check and optional LLM generation**
    - Loader queries `cache.read_cached(fullname)`:
-     - If cached source exists, it is used directly (`from_cache=True`).
-     - Otherwise `_generate_and_cache` is called:
-       - Wraps `generate_module_code(fullname, functions, context)` in a `spinner`.
-       - Writes the string result to a `.py` file via `cache.write_cached`.
+     - **Static mode:** If cached source exists, it is used directly (`from_cache=True`). Otherwise `_generate_and_cache` is called and the result is cached.
+     - **Dynamic mode:** Always calls `_generate_and_cache` and **never uses cache**, even if it exists. Regenerates on every import to capture runtime context.
+     - Generation wraps `generate_module_code(fullname, functions, context, type_schemas, function_output_types)` in a `spinner`.
+     - In static mode only, writes the string result to a `.py` file via `cache.write_cached`.
 
 5. **Safety validation and execution**
    - Before executing, `validate_code(source, allow_unsafe=settings.allow_unsafe)` enforces safety.
@@ -271,6 +317,91 @@ When working on the project:
 
 ---
 
+## Type Registry System
+
+The type registry (`src/wishful/types/`) allows users to register complex types (Pydantic models, dataclasses, TypedDict) so the LLM can generate functions that return properly structured data.
+
+### Using the Type Registry
+
+Basic registration:
+
+```python
+import wishful
+from dataclasses import dataclass
+
+@wishful.type
+@dataclass
+class Book:
+    """A book with title, author, and year."""
+    title: str
+    author: str
+    year: int
+```
+
+Binding types to specific function outputs:
+
+```python
+@wishful.type(output_for="parse_user_data")
+@dataclass
+class UserProfile:
+    """User profile with name, email, and age."""
+    name: str
+    email: str
+    age: int
+```
+
+Multiple functions sharing a type:
+
+```python
+from typing import TypedDict
+
+class ProductInfo(TypedDict):
+    """Product information."""
+    name: str
+    price: float
+
+wishful.type(ProductInfo, output_for=["parse_product", "create_product"])
+```
+
+Pydantic models with Field constraints and docstring-driven behavior:
+
+```python
+from pydantic import BaseModel, Field
+
+@wishful.type
+class ProjectPlan(BaseModel):
+    """Project plan written by master yoda from star wars."""
+    project_brief: str
+    milestones: list[str] = Field(description="list of milestones", min_length=10)
+    budget: float = Field(gt=0, description="project budget in USD")
+```
+
+The LLM will respect both Field constraints (min_length=10, gt=0) AND the docstring style (generates text in Yoda-speak).
+
+### How It Works
+
+1. **Registration**: The `@wishful.type` decorator registers a type in the global `TypeRegistry`.
+2. **Serialization**: When generating code, the registry serializes registered types to Python source code.
+3. **Prompt Enhancement**: Type definitions and output bindings are included in the LLM prompt's system message.
+4. **Generation**: The LLM generates code that constructs and returns instances of the registered types.
+
+### Implementation Details
+
+- `TypeRegistry._serialize_pydantic()` – extracts Pydantic model fields and types, **includes docstrings**
+  - `_build_field_args()` – extracts Pydantic v2 Field constraints from metadata:
+    - Parses `field_info.metadata` list for constraint objects: `MinLen`, `MaxLen`, `Gt`, `Ge`, `Lt`, `Le`
+    - Extracts `pattern` from `_PydanticGeneralMetadata` objects
+    - Supports both Pydantic v1 (direct attributes) and v2 (metadata list) constraint storage
+    - Serializes constraints into `Field(description='...', min_length=10, ...)` format
+- `TypeRegistry._serialize_dataclass()` – generates dataclass definitions, **includes docstrings**
+- `TypeRegistry._serialize_typed_dict()` – formats TypedDict specifications, **includes docstrings**
+- Type schemas are passed to `generate_module_code()` as `type_schemas` and `function_output_types`
+- **Docstrings influence LLM behavior**: The docstring text (e.g., "Project plan written by master yoda from star wars") is included in the serialized type definition and affects how the LLM generates content (tone, style, domain-specific language)
+- See `examples/07_typed_outputs.py` for comprehensive usage examples
+- See `tests/test_types.py` for 30 tests covering all scenarios
+
+---
+
 ## Cache & CLI Behavior
 
 ### Cache layout
@@ -278,8 +409,9 @@ When working on the project:
 - The root cache directory is `settings.cache_dir` (default `.wishful` under the current working directory).
 - `cache.manager.module_path(fullname)`:
   - Strips leading `wishful.` from the module name.
+  - **Also strips `static` and `dynamic` namespace prefixes** so both `wishful.static.text` and `wishful.dynamic.text` map to the same cache file.
   - Converts dots to directories and appends `.py`.
-  - Example: `"wishful.text"` → `.wishful/text.py`.
+  - Example: `"wishful.static.text"` → `.wishful/text.py`, `"wishful.dynamic.text"` → `.wishful/text.py`.
 - Utilities in `cache.manager`:
   - `read_cached(fullname)` → `str | None`
   - `write_cached(fullname, source)` → `Path`
@@ -289,7 +421,7 @@ The top‑level public API in `wishful.__init__` re‑exports high‑level cache
 
 - `wishful.clear_cache()`
 - `wishful.inspect_cache()`
-- `wishful.regenerate(module_name)`
+- `wishful.regenerate(module_name)` – defaults to static namespace if no prefix given
 
 ### CLI (`python -m wishful`)
 
@@ -298,13 +430,13 @@ Via `src/wishful/__main__.py`:
 - `python -m wishful` – prints help and usage.
 - `python -m wishful inspect` – shows current cached modules under `settings.cache_dir`.
 - `python -m wishful clear` – clears the cache directory.
-- `python -m wishful regen wishful.text` – deletes cache for the given module so it is regenerated on next import.
+- `python -m wishful regen wishful.static.text` – deletes cache for the given module so it is regenerated on next import.
 
 From this repo, always invoke via uv:
 
 ```bash
 uv run python -m wishful inspect
-uv run python -m wishful regen wishful.text
+uv run python -m wishful regen wishful.static.text
 ```
 
 If you modify CLI behavior, update tests in `tests/test_cli.py` accordingly.
@@ -315,7 +447,7 @@ If you modify CLI behavior, update tests in `tests/test_cli.py` accordingly.
 
 The only place that calls the LLM is `src/wishful/llm/client.py`.
 
-- `generate_module_code(module: str, functions: Sequence[str], context: str | None) -> str`
+- `generate_module_code(module: str, functions: Sequence[str], context: str | None, type_schemas: dict[str, str] | None, function_output_types: dict[str, str] | None) -> str`
   - If `WISHFUL_FAKE_LLM=1`, returns stub implementations from `_fake_response`:
     - For each requested function, generates a placeholder that returns its args/kwargs.
   - Otherwise:
@@ -327,11 +459,14 @@ The only place that calls the LLM is `src/wishful/llm/client.py`.
     - Extracts the returned content, strips markdown code fences, and returns the raw Python source string.
   - Raises `GenerationError` on failure or empty responses.
 
-- `prompts.build_messages(module, functions, context)`:
+- `prompts.build_messages(module, functions, context, type_schemas, function_output_types)`:
   - `system` message:
     - Instructs the model to emit **only executable Python code**, no markdown fences.
-    - Encourages simple, readable, standard‑library‑only code.
+    - Encourages simple, readable code.
+    - Explicitly states "You may use any Python libraries available in the environment" (Pydantic, requests, etc.).
     - Explicitly discourages network, filesystem writes, subprocess, shell execution.
+    - **Includes registered type schemas** when available, formatted as Python class definitions.
+    - **Specifies output types** for specific functions when registered via `@wishful.type(output_for=...)`.
   - `user` message:
     - Contains module name and list of functions to implement.
     - Includes discovered context (comments/nearby code) as a block when available.

@@ -4,7 +4,7 @@ This demonstrates generating utilities for validating and cleaning messy data.
 """
 
 # Desired: validate email format, sanitize user input, normalize whitespace
-from wishful.validation import is_valid_email, sanitize_html, normalize_whitespace
+from wishful.static.validation import is_valid_email, sanitize_html, normalize_whitespace
 
 # Email validation
 emails = ["valid@example.com", "invalid@", "also@valid.co.uk", "nope"]
