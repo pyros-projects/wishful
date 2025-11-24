@@ -3,12 +3,30 @@ title: Welcome
 description: LLM imports that feel like a magic trick.
 ---
 
+import { Code } from 'astro:components';
+
 <section className="hero hero-grid">
-  <div>
+  <div className="hero-main">
     <div className="hero-copy-kicker">
       <span /> JIT codegen, import-shaped
     </div>
     <h1 className="hero-title">Write the import you wish existed.</h1>
+
+    <div className="hero-code">
+      <Code
+        code={`from wishful.static.text import extract_emails
+
+raw = "Contact us at team@example.com or sales@demo.dev"
+emails = extract_emails(raw)
+print(emails)`}
+        lang="python"
+      />
+      <div className="hero-code-footer">
+        <span><strong>First run:</strong> wishful asks the LLM, validates the code, and caches it under <code>.wishful/text.py</code>.</span>
+        <span><strong>Later runs:</strong> just a normal Python import — no latency, no API call.</span>
+      </div>
+    </div>
+
     <p className="hero-subtitle">
       <code>import wishful</code> turns “someone should really write this
       helper” into cached, type-aware Python modules — with safety checks,
@@ -26,21 +44,6 @@ description: LLM imports that feel like a magic trick.
       <a href="https://github.com/pyros-projects/wishful">README</a> and come
       back here for the deeper “how it works” tour.
     </p>
-  </div>
-
-  <div className="hero-code">
-    <pre>
-      <code>
-{`from wishful.static.text import extract_emails
-
-raw = "Contact us at team@example.com or sales@demo.dev"
-print(extract_emails(raw))  # ['team@example.com', 'sales@demo.dev']`}
-      </code>
-    </pre>
-    <div className="hero-code-footer">
-      <span><strong>First run:</strong> wishful asks the LLM, validates the code, and caches it under <code>.wishful/text.py</code>.</span>
-      <span><strong>Later runs:</strong> just a normal Python import — no latency, no API call.</span>
-    </div>
   </div>
 </section>
 
