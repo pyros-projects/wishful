@@ -1,5 +1,12 @@
 # wishful 🪄
 
+[![PyPI version](https://badge.fury.io/py/wishful.svg)](https://badge.fury.io/py/wishful)
+[![Python 3.12+](https://img.shields.io/badge/python-3.12+-blue.svg)](https://www.python.org/downloads/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![Tests](https://img.shields.io/badge/tests-83%20passed-brightgreen.svg)](https://github.com/pyros-projects/wishful)
+[![Coverage](https://img.shields.io/badge/coverage-80%25-green.svg)](https://github.com/pyros-projects/wishful)
+[![Code style: ruff](https://img.shields.io/badge/code%20style-ruff-000000.svg)](https://github.com/astral-sh/ruff)
+
 > _"Code so good, you'd think it was wishful thinking"_
 
 Stop writing boilerplate. Start wishing for it instead.
@@ -164,7 +171,7 @@ from wishful.dynamic.content import generate_story
 - 🎨 **Creative**: Different results on each run
 - 👉 **Use for**: creative content, experiments, testing variations
 
-Both share the same cache file (`.wishful/text.py`), so you can switch modes freely.
+**Note**: Dynamic imports always regenerate and never use the cache, even if a cached version exists. This ensures fresh, context-aware results every time.
 
 ---
 
@@ -214,10 +221,7 @@ wishful.configure(
     cache_dir="/tmp/.wishful",  # Hide your wishes somewhere else
     spinner=False,              # Silence the "generating..." spinner
     review=True,                # Paranoid? Review code before it runs
-    # Control how much nearby code is sent to the LLM for context
-    # (applies to both import lines and call sites)
-    # or set via WISHFUL_CONTEXT_RADIUS env var.
-    # Example: wishful.set_context_radius(6)
+    context_radius=6,           # Lines of context around imports/calls (default: 3)
     allow_unsafe=False,         # Keep the safety rails ON (recommended)
 )
 ```
@@ -396,13 +400,14 @@ wishful/
 ## 🤔 FAQ (Frequently Asked Wishes)
 
 **Q: Is this production-ready?**  
+A: Define "production." 🙃
 
 **Q: Can I make the LLM follow a specific style?**  
 A: Yes! Use docstrings in `@wishful.type` decorated classes. Want Yoda-speak? Add `"""Written by master yoda from star wars."""` — the LLM will actually do it.
 
 **Q: Do type hints and Pydantic constraints actually work?**  
 A: Surprisingly, yes! Field constraints like `min_length=10` or `gt=0` are serialized and sent to the LLM, which respects them.
-A: Define "production." 🙃
+
 
 **Q: What if the LLM generates bad code?**  
 A: That's what the cache is for. Check `.wishful/`, tweak it, commit it, and it's locked in.
