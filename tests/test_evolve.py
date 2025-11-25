@@ -276,3 +276,271 @@ class TestEvolutionHistory:
         assert len(d["history"]) == 2
         assert d["history"][0]["generation"] == 1
         assert d["history"][0]["best_fitness"] == 30.0
+
+
+# =============================================================================
+# Phase 2: Mutation Module Tests
+# =============================================================================
+
+class TestBuildEvolutionContext:
+    """Tests for _build_evolution_context() - the AlphaEvolve context builder."""
+
+    def test_context_includes_current_source(self):
+        """Context should include the current best implementation."""
+        from wishful.evolve.mutation import _build_evolution_context
+
+        context = _build_evolution_context(
+            source="def fn(x):\n    return x * 2",
+            mutation_prompt="",
+            function_name="fn",
+            history=[]
+        )
+
+        assert "def fn(x):" in context
+        assert "return x * 2" in context
+        assert "CURRENT BEST IMPLEMENTATION" in context
+
+    def test_context_includes_mutation_prompt(self):
+        """Context should include user guidance when provided."""
+        from wishful.evolve.mutation import _build_evolution_context
+
+        context = _build_evolution_context(
+            source="def fn(x): return x",
+            mutation_prompt="make it faster using numpy",
+            function_name="fn",
+            history=[]
+        )
+
+        assert "make it faster using numpy" in context
+        assert "USER GUIDANCE" in context
+
+    def test_context_excludes_prompt_when_empty(self):
+        """Context should not have USER GUIDANCE section when prompt is empty."""
+        from wishful.evolve.mutation import _build_evolution_context
+
+        context = _build_evolution_context(
+            source="def fn(x): return x",
+            mutation_prompt="",
+            function_name="fn",
+            history=[]
+        )
+
+        assert "USER GUIDANCE" not in context
+
+    def test_context_includes_history(self):
+        """Context should include evolution history when provided."""
+        from wishful.evolve.mutation import _build_evolution_context
+
+        history = [
+            {"source": "def fn(x): return x + 1", "fitness": 50.0, "failed": False, "error": None},
+            {"source": "def fn(x): return x * 2", "fitness": 30.0, "failed": False, "error": None},
+        ]
+
+        context = _build_evolution_context(
+            source="def fn(x): return x + 1",
+            mutation_prompt="",
+            function_name="fn",
+            history=history
+        )
+
+        assert "EVOLUTION HISTORY" in context
+        assert "sorted by fitness" in context.lower()
+        assert "Fitness = 50.00" in context
+        assert "Fitness = 30.00" in context
+
+    def test_context_includes_failed_variants(self):
+        """Context should include failed variants with error info."""
+        from wishful.evolve.mutation import _build_evolution_context
+
+        history = [
+            {"source": "def fn(x): return x", "fitness": 50.0, "failed": False, "error": None},
+            {"source": "def fn(x): syntax error", "fitness": None, "failed": True, "error": "SyntaxError"},
+        ]
+
+        context = _build_evolution_context(
+            source="def fn(x): return x",
+            mutation_prompt="",
+            function_name="fn",
+            history=history
+        )
+
+        assert "FAILED" in context
+        assert "SyntaxError" in context
+
+    def test_context_has_task_instructions(self):
+        """Context should include clear instructions for the LLM."""
+        from wishful.evolve.mutation import _build_evolution_context
+
+        context = _build_evolution_context(
+            source="def fn(x): return x",
+            mutation_prompt="",
+            function_name="fn",
+            history=[]
+        )
+
+        assert "YOUR TASK" in context
+        assert "IMPROVED" in context or "improved" in context
+
+    def test_context_empty_history(self):
+        """Context should work with empty history."""
+        from wishful.evolve.mutation import _build_evolution_context
+
+        context = _build_evolution_context(
+            source="def fn(x): return x",
+            mutation_prompt="",
+            function_name="fn",
+            history=[]
+        )
+
+        # Should not include history section when empty
+        assert "EVOLUTION HISTORY" not in context
+
+
+class TestTruncateSource:
+    """Tests for _truncate_source() utility."""
+
+    def test_short_source_unchanged(self):
+        """Short source code should be returned unchanged."""
+        from wishful.evolve.mutation import _truncate_source
+
+        source = "def fn():\n    return 1"
+        result = _truncate_source(source, max_lines=10)
+
+        assert result == source
+
+    def test_long_source_truncated(self):
+        """Long source code should be truncated with indicator."""
+        from wishful.evolve.mutation import _truncate_source
+
+        lines = [f"    line{i}" for i in range(20)]
+        source = "def fn():\n" + "\n".join(lines)
+
+        result = _truncate_source(source, max_lines=5)
+
+        # Should have max_lines lines
+        result_lines = result.strip().split("\n")
+        assert len(result_lines) == 6  # 5 lines + truncation indicator
+
+        # Should have truncation indicator
+        assert "more lines" in result
+
+    def test_truncate_exact_limit(self):
+        """Source at exactly max_lines should not be truncated."""
+        from wishful.evolve.mutation import _truncate_source
+
+        lines = ["def fn():"] + [f"    line{i}" for i in range(9)]
+        source = "\n".join(lines)
+
+        result = _truncate_source(source, max_lines=10)
+
+        assert result == source
+        assert "more lines" not in result
+
+
+class TestGetFunctionSource:
+    """Tests for get_function_source() utility."""
+
+    def test_get_source_from_wishful_attribute(self):
+        """Should extract source from __wishful_source__ attribute."""
+        from wishful.evolve.mutation import get_function_source
+
+        def dummy():
+            pass
+        dummy.__wishful_source__ = "def dummy():\n    return 42"
+
+        result = get_function_source(dummy)
+
+        assert result == "def dummy():\n    return 42"
+
+    def test_get_source_from_inspect(self):
+        """Should fall back to inspect.getsource() for regular functions."""
+        from wishful.evolve.mutation import get_function_source
+
+        def regular_function():
+            return 123
+
+        result = get_function_source(regular_function)
+
+        assert "def regular_function" in result
+        assert "return 123" in result
+
+    def test_get_source_raises_for_unavailable(self):
+        """Should raise ValueError when source is unavailable."""
+        from wishful.evolve.mutation import get_function_source
+
+        # Built-in function has no source
+        with pytest.raises(ValueError, match="source"):
+            get_function_source(len)
+
+
+class TestMutateWithLLM:
+    """Tests for mutate_with_llm() - the core LLM mutation function."""
+
+    def test_mutate_calls_llm(self, monkeypatch):
+        """mutate_with_llm should call generate_module_code."""
+        called_with = {"context": None, "functions": None}
+
+        def fake_generate(module, functions, context, **kwargs):
+            called_with["context"] = context
+            called_with["functions"] = functions
+            return "def fn(x):\n    return x + 1"
+
+        monkeypatch.setattr("wishful.evolve.mutation.generate_module_code", fake_generate)
+
+        from wishful.evolve.mutation import mutate_with_llm
+
+        result = mutate_with_llm(
+            source="def fn(x):\n    return x",
+            mutation_prompt="improve it",
+            function_name="fn",
+            history=[]
+        )
+
+        assert called_with["functions"] == ["fn"]
+        assert "def fn(x)" in called_with["context"]
+        assert "improve it" in called_with["context"]
+        assert "def fn(x):" in result
+
+    def test_mutate_passes_history_to_context(self, monkeypatch):
+        """mutate_with_llm should include history in LLM context."""
+        called_with = {"context": None}
+
+        def fake_generate(module, functions, context, **kwargs):
+            called_with["context"] = context
+            return "def fn(x):\n    return x + 1"
+
+        monkeypatch.setattr("wishful.evolve.mutation.generate_module_code", fake_generate)
+
+        from wishful.evolve.mutation import mutate_with_llm
+
+        history = [
+            {"source": "def fn(x): return x * 2", "fitness": 50.0, "failed": False, "error": None},
+        ]
+
+        mutate_with_llm(
+            source="def fn(x):\n    return x",
+            mutation_prompt="",
+            function_name="fn",
+            history=history
+        )
+
+        assert "Fitness = 50.00" in called_with["context"]
+        assert "def fn(x): return x * 2" in called_with["context"]
+
+    def test_mutate_returns_generated_code(self, monkeypatch):
+        """mutate_with_llm should return the LLM-generated code."""
+        def fake_generate(module, functions, context, **kwargs):
+            return "def fn(x):\n    return x * 100"
+
+        monkeypatch.setattr("wishful.evolve.mutation.generate_module_code", fake_generate)
+
+        from wishful.evolve.mutation import mutate_with_llm
+
+        result = mutate_with_llm(
+            source="def fn(x):\n    return x",
+            mutation_prompt="",
+            function_name="fn",
+            history=[]
+        )
+
+        assert result == "def fn(x):\n    return x * 100"

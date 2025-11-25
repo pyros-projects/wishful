@@ -119,28 +119,30 @@ If implementation cannot follow specification exactly:
 
 ### Phase 2: Mutation Module - The AlphaEvolve Core
 
-- [ ] T2 Phase 2: LLM Mutation with History Context `[component: evolve-mutation]`
+- [x] T2 Phase 2: LLM Mutation with History Context `[component: evolve-mutation]`
 
-    - [ ] T2.1 Prime Context
-        - [ ] T2.1.1 Read mutation module design `[ref: 02-evolve-implementation.md; lines: 737-889]`
-        - [ ] T2.1.2 Study `_build_evolution_context()` function - formats history for LLM `[ref: 02-evolve-implementation.md; lines: 784-862]`
-        - [ ] T2.1.3 Review existing LLM client usage `[ref: src/wishful/llm/client.py]`
+    - [x] T2.1 Prime Context
+        - [x] T2.1.1 Read mutation module design `[ref: 02-evolve-implementation.md; lines: 737-889]`
+        - [x] T2.1.2 Study `_build_evolution_context()` function - formats history for LLM `[ref: 02-evolve-implementation.md; lines: 784-862]`
+        - [x] T2.1.3 Review existing LLM client usage `[ref: src/wishful/llm/client.py]`
 
-    - [ ] T2.2 Write Tests `[activity: test-execution]`
-        - [ ] T2.2.1 Add `TestEvolveMutationPrompt` tests `[ref: 02-evolve-implementation.md; lines: 347-372]`
-        - [ ] T2.2.2 Add `TestEvolveHistoryContext` tests (CRITICAL - the AlphaEvolve innovation) `[ref: 02-evolve-implementation.md; lines: 130-261]`
-        - [ ] T2.2.3 Add `TestEvolveErrorCases` for mutation failures `[ref: 02-evolve-implementation.md; lines: 451-505]`
+    - [x] T2.2 Write Tests `[activity: test-execution]`
+        - [x] T2.2.1 Add `TestBuildEvolutionContext` tests (7 tests)
+        - [x] T2.2.2 Add `TestTruncateSource` tests (3 tests)
+        - [x] T2.2.3 Add `TestGetFunctionSource` tests (3 tests)
+        - [x] T2.2.4 Add `TestMutateWithLLM` tests (3 tests)
 
-    - [ ] T2.3 Implement `[activity: component-development]`
-        - [ ] T2.3.1 Create `src/wishful/evolve/mutation.py` `[ref: 02-evolve-implementation.md; lines: 741-889]`
-        - [ ] T2.3.2 Implement `mutate_with_llm(source, mutation_prompt, function_name, history)` `[ref: 02-evolve-implementation.md; lines: 751-781]`
-        - [ ] T2.3.3 Implement `_build_evolution_context()` with rich history formatting `[ref: 02-evolve-implementation.md; lines: 784-862]`
-        - [ ] T2.3.4 Implement `get_function_source()` utility `[ref: 02-evolve-implementation.md; lines: 873-889]`
+    - [x] T2.3 Implement `[activity: component-development]`
+        - [x] T2.3.1 Create `src/wishful/evolve/mutation.py` `[ref: 02-evolve-implementation.md; lines: 741-889]`
+        - [x] T2.3.2 Implement `mutate_with_llm(source, mutation_prompt, function_name, history)` `[ref: 02-evolve-implementation.md; lines: 751-781]`
+        - [x] T2.3.3 Implement `_build_evolution_context()` with rich history formatting `[ref: 02-evolve-implementation.md; lines: 784-862]`
+        - [x] T2.3.4 Implement `_truncate_source()` utility
+        - [x] T2.3.5 Implement `get_function_source()` utility `[ref: 02-evolve-implementation.md; lines: 873-889]`
 
-    - [ ] T2.4 Validate `[activity: run-tests]`
-        - [ ] T2.4.1 Run `uv run pytest tests/test_evolve.py::TestEvolveMutationPrompt -v`
-        - [ ] T2.4.2 Run `uv run pytest tests/test_evolve.py::TestEvolveHistoryContext -v`
-        - [ ] T2.4.3 Run `uv run pytest tests/test_evolve.py::TestEvolveErrorCases -v`
+    - [x] T2.4 Validate `[activity: run-tests]`
+        - [x] T2.4.1 Run `uv run pytest tests/test_evolve.py -v` - 33 tests passing
+        - [x] T2.4.2 Run `uv run mypy src/wishful/evolve/` - No issues
+        - [x] T2.4.3 Create tryout scripts: 05, 06, 07
 
 ---
 
