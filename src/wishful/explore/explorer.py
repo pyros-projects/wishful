@@ -278,6 +278,9 @@ async def _generate_and_evaluate_async(
                     display.update()
                 continue
 
+            # Attach source to function so benchmark can access it
+            fn.__wishful_source__ = source
+
             # Test/benchmark
             try:
                 passed = test is None or test(fn)
