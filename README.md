@@ -8,7 +8,7 @@
   <a href="https://badge.fury.io/py/wishful"><img src="https://badge.fury.io/py/wishful.svg" alt="PyPI version"></a>
   <a href="https://www.python.org/downloads/"><img src="https://img.shields.io/badge/python-3.12+-blue.svg" alt="Python 3.12+"></a>
   <a href="https://opensource.org/licenses/MIT"><img src="https://img.shields.io/badge/License-MIT-yellow.svg" alt="License: MIT"></a>
-  <a href="https://github.com/pyros-projects/wishful"><img src="https://img.shields.io/badge/tests-83%20passed-brightgreen.svg" alt="Tests"></a>
+  <a href="https://github.com/pyros-projects/wishful"><img src="https://img.shields.io/badge/tests-112%20passed-brightgreen.svg" alt="Tests"></a>
   <a href="https://github.com/pyros-projects/wishful"><img src="https://img.shields.io/badge/coverage-80%25-green.svg" alt="Coverage"></a>
   <a href="https://github.com/astral-sh/ruff"><img src="https://img.shields.io/badge/code%20style-ruff-000000.svg" alt="Code style: ruff"></a>
 </p>
@@ -167,6 +167,85 @@ my_intro = magical_content.create_a_cosmic_horrorstory_intro()
 
 ---
 
+## 🔍 Explore: When One Wish Isn't Enough
+
+_Sometimes the genie needs a few tries to get it right._
+
+What if instead of trusting the first implementation, you could generate **multiple variants**, test them all, and keep only the winner? Enter `wishful.explore()`:
+
+```python
+import wishful
+
+# Generate 5 implementations, keep the first one that passes
+parser = wishful.explore(
+    "wishful.static.text.extract_emails",
+    variants=5,
+    test=lambda fn: fn("test@example.com") == ["test@example.com"]
+)
+
+# The winner is cached! Future imports use the proven implementation.
+from wishful.static.text import extract_emails  # ← Uses the battle-tested winner
+```
+
+**The magic**: `explore()` generates multiple candidates, tests each one, and **caches the winner** to `.wishful/`. Subsequent imports skip the exploration entirely—you get the proven implementation instantly.
+
+### Find the Fastest Implementation
+
+```python
+def benchmark_sort(fn):
+    import time
+    start = time.perf_counter()
+    for _ in range(100):
+        fn(list(range(1000, 0, -1)))
+    return 100 / (time.perf_counter() - start)  # ops/sec
+
+# Generate 10 variants, benchmark each, return the fastest
+fastest = wishful.explore(
+    "wishful.static.algorithms.sort_list",
+    variants=10,
+    benchmark=benchmark_sort,
+    optimize="fastest"
+)
+
+print(fastest.__wishful_metadata__)
+# {'variant_index': 7, 'benchmark_score': 814106.86, ...}
+```
+
+### Beautiful Progress Display
+
+`explore()` shows a real-time Rich display while it works:
+
+```
+╭────────── 🔍 wishful.explore → wishful.static.text.extract_emails ───────────╮
+│    Exploring extract_emails ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 3/3 • 0:00:03     │
+│  Strategy:  first_passing                                                    │
+│  Passed:    2                                                                │
+│  Failed:    1                                                                │
+│                                   Variants                                   │
+│  ┏━━━━━━┳━━━━━━━━━━━━┳━━━━━━━━━┳━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓  │
+│  ┃    # ┃ Status     ┃    Time ┃ Info                                     ┃  │
+│  ┡━━━━━━╇━━━━━━━━━━━━╇━━━━━━━━━╇━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┩  │
+│  │    0 │ passed     │    1.4s │ def extract_emails(text: str) -> list[st │  │
+│  │    1 │ failed     │    0.8s │ def extract_emails(s): return re.findall │  │
+│  │    2 │ passed     │    1.2s │ import re  def extract_emails(text): ... │  │
+│  └──────┴────────────┴─────────┴──────────────────────────────────────────┘  │
+╰──────────────────────────────────────────────────────────────────────────────╯
+```
+
+Results are also saved to CSV in `.wishful/_explore/` for downstream analysis. Because data-driven wishful thinking is still wishful thinking. 📊
+
+### Going Deeper: LLMs Judging LLMs
+
+Want to get _really_ wild? Check out `examples/13_explore_advanced.py` for:
+- **LLM-as-Judge**: Use `wishful.dynamic` to score code quality
+- **Code Golf**: Find the shortest working implementation
+- **Self-Improving Loops**: The winner helps evaluate the next round
+- **Multi-Objective Optimization**: Speed × brevity × quality
+
+It's turtles all the way down. 🐢
+
+---
+
 ## 🗄️ Cache Ops: Because Sometimes Wishes Need Revising
 
 ```python
@@ -193,20 +272,64 @@ The cache is just regular Python files in `.wishful/`. Want to tweak the generat
 
 ## ⚙️ Configuration: Fine-Tune Your Wishes
 
+_Because even genies need settings._
+
 ```python
 import wishful
 
 wishful.configure(
-    model="gpt-4o-mini",        # Switch models like changing channels
-    cache_dir="/tmp/.wishful",  # Hide your wishes somewhere else
-    spinner=False,              # Silence the "generating..." spinner
-    review=True,                # Review code before it runs
-    context_radius=6,           # Lines of context (default: 3)
-    allow_unsafe=False,         # Keep safety rails ON (recommended)
+    model="openai/gpt-5",          # Switch models - use litellm model IDs (default: "azure/gpt-4.1")
+    cache_dir="/tmp/.wishful",     # Cache directory for generated modules (default: ".wishful")
+    spinner=False,                 # Show/hide the "generating..." spinner (default: True)
+    review=True,                   # Review code before execution (default: False)
+    allow_unsafe=False,            # Disable safety checks - dangerous! (default: False)
+    temperature=0.7,               # LLM sampling temperature (default: 1.0)
+    max_tokens=8000,               # Maximum LLM response tokens (default: 4096)
+    debug=True,                    # Enable debug logging (default: False)
+    log_level="INFO",              # Logging level: DEBUG, INFO, WARNING, ERROR (default: WARNING)
+    log_to_file=True,              # Write logs to cache_dir/_logs/ (default: True)
+    system_prompt="Custom prompt", # Override the system prompt for LLM (advanced)
 )
+
+# Context radius is configured separately (it likes to be special)
+wishful.set_context_radius(6)  # Lines of context around imports AND call sites (default: 3)
 ```
 
-**Environment variables**: `WISHFUL_MODEL`, `WISHFUL_CACHE_DIR`, `WISHFUL_REVIEW`, `WISHFUL_DEBUG`, `WISHFUL_UNSAFE`, `WISHFUL_SPINNER`, `WISHFUL_MAX_TOKENS`, `WISHFUL_TEMPERATURE`, `WISHFUL_CONTEXT_RADIUS`
+**All Configuration Options:**
+
+_Your wish, your rules._
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `model` | `str` | `"azure/gpt-4.1"` | LLM model identifier (litellm format) |
+| `cache_dir` | `str \| Path` | `".wishful"` | Directory for cached generated modules |
+| `review` | `bool` | `False` | Prompt for approval before executing generated code |
+| `spinner` | `bool` | `True` | Show spinner during LLM generation |
+| `allow_unsafe` | `bool` | `False` | Disable safety validation (use with caution!) |
+| `temperature` | `float` | `1.0` | LLM sampling temperature (0.0-2.0) |
+| `max_tokens` | `int` | `4096` | Maximum tokens for LLM response |
+| `debug` | `bool` | `False` | Enable debug mode (sets log_level to DEBUG) |
+| `log_level` | `str` | `"WARNING"` | Logging level (DEBUG, INFO, WARNING, ERROR) |
+| `log_to_file` | `bool` | `True` | Write logs to `{cache_dir}/_logs/` |
+| `system_prompt` | `str` | _(see source)_ | Custom system prompt for LLM (advanced) |
+
+**Environment Variables:**
+
+All settings can also be configured via environment variables:
+
+- `WISHFUL_MODEL` or `DEFAULT_MODEL` - LLM model identifier
+- `WISHFUL_CACHE_DIR` - Cache directory path
+- `WISHFUL_REVIEW` - Set to `"1"` to enable review mode
+- `WISHFUL_DEBUG` - Set to `"1"` to enable debug mode
+- `WISHFUL_UNSAFE` - Set to `"1"` to disable safety checks
+- `WISHFUL_SPINNER` - Set to `"0"` to disable spinner
+- `WISHFUL_MAX_TOKENS` - Maximum tokens (integer)
+- `WISHFUL_TEMPERATURE` - Sampling temperature (float)
+- `WISHFUL_CONTEXT_RADIUS` - Context lines around imports and call sites (integer)
+- `WISHFUL_LOG_LEVEL` - Logging level (DEBUG, INFO, WARNING, ERROR)
+- `WISHFUL_LOG_TO_FILE` - Set to `"0"` to disable file logging
+- `WISHFUL_SYSTEM_PROMPT` - Custom system prompt
+- `WISHFUL_FAKE_LLM` - Set to `"1"` for deterministic stub generation (testing)
 
 ---
 
@@ -214,7 +337,7 @@ wishful.configure(
 
 Generated code gets AST-scanned to block dangerous patterns: forbidden imports (`os`, `subprocess`, `sys`), `eval()`/`exec()`, unsafe file operations, and system calls.
 
-**Override at your own peril**: `WISHFUL_UNSAFE=1` or `allow_unsafe=True` turns off the guardrails.
+**Override at your own peril**: `WISHFUL_UNSAFE=1` or `allow_unsafe=True` turns off the guardrails. We won't judge. (We totally will.)
 
 ---
 
@@ -230,6 +353,8 @@ python my_tests.py  # No API calls, just predictable stubs
 ---
 
 ## 🔮 How the Magic Actually Works
+
+_Spoiler: it's not actual magic. Or is it?_
 
 1. **Import hook** intercepts `wishful.static.*` and `wishful.dynamic.*` imports
 2. **Cache check**: `static` imports load instantly if cached; `dynamic` always regenerates
@@ -267,9 +392,25 @@ from wishful.static.dates import parse_fuzzy_date
 print(parse_fuzzy_date("next Tuesday"))  # Your guess is as good as mine
 
 # Want different results each time? Use dynamic imports!
-from wishful.dynamic.jokes import programming_joke
+# The key: import the MODULE, not individual functions!
+import wishful
+import wishful.dynamic.jokes
 
-print(programming_joke())  # New joke on every import 🎲
+# Each function CALL triggers fresh regeneration with runtime context
+print(wishful.dynamic.jokes.programming_joke())  # Fresh joke!
+print(wishful.dynamic.jokes.programming_joke())  # Different joke! 🎲
+print(wishful.dynamic.jokes.programming_joke())  # Another new joke!
+
+# Alternative: use wishful.reimport() to force a fresh module load
+jokes = wishful.reimport('wishful.dynamic.jokes')
+print(jokes.programming_joke())  # Also regenerates!
+
+# Why does this matter?
+# ✓ DO:   import wishful.dynamic.jokes
+#         wishful.dynamic.jokes.my_func()  # Regenerates on each call
+# ✓ DO:   wishful.reimport('wishful.dynamic.jokes')  # Forces fresh import
+# ✗ DON'T: from wishful.dynamic.jokes import my_func
+#          my_func()  # This binds once and won't regenerate!
 ```
 
 ---
@@ -340,14 +481,17 @@ wishful/
 │   ├── config.py         # Configuration
 │   ├── cache/            # Cache management
 │   ├── core/             # Import hooks & discovery
-│   ├── llm/              # LLM integration
+│   ├── llm/              # LLM integration (sync + async)
 │   ├── types/            # Type registry system
+│   ├── explore/          # Multi-variant generation & selection
 │   └── safety/           # Safety validation
-├── tests/                # Test suite (83 tests, 80% coverage)
+├── tests/                # Test suite (112 tests)
 ├── examples/             # Usage examples
 │   ├── 07_typed_outputs.py    # Type registry showcase
 │   ├── 08_dynamic_vs_static.py # Static vs dynamic modes
-│   └── 09_context_shenanigans.py # Context discovery
+│   ├── 09_context_shenanigans.py # Context discovery
+│   ├── 12_explore.py          # Multi-variant exploration
+│   └── 13_explore_advanced.py # LLM-as-judge, self-improving loops
 └── pyproject.toml        # Project config
 ```
 
@@ -356,7 +500,7 @@ wishful/
 ## 🤔 FAQ (Frequently Asked Wishes)
 
 **Q: Is this production-ready?**  
-A: Define "production." 🙃
+A: Define "production." 🙃 (But seriously: the cache gives you plain Python files you can review, edit, and commit. So... maybe?)
 
 **Q: Can I make the LLM follow a specific style?**  
 A: Yes! Use docstrings in `@wishful.type` decorated classes. Want Yoda-speak? Add `"""Written by master yoda from star wars."""` — the LLM will actually do it.
@@ -375,6 +519,12 @@ A: The LLM will do its best. Results may vary. Hilarity may ensue.
 
 **Q: Is this just lazy programming?**  
 A: It's not lazy. It's _efficient wishful thinking_. 😎
+
+**Q: What if the LLM generates multiple bad implementations?**  
+A: That's what `wishful.explore()` is for! Generate 5-10 variants, test each one, keep the winner. It's like having a code review, but automated and with more variants than your team has patience for.
+
+**Q: Does explore() cache the winning implementation?**  
+A: Yes! The winning variant gets cached to `.wishful/` just like a regular import. Future imports use the proven winner—no re-exploration needed.
 
 ---
 

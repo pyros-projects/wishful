@@ -1,6 +1,6 @@
 [project]
 name = "wishful"
-version = "0.2.3"
+version = "0.2.4"
 description = "Wishful thinking for Python"
 readme = "README.md"
 authors = [
@@ -13,6 +13,7 @@ dependencies = [
     "python-dotenv>=1.0.1",
     "pydantic>=2.12.4",
     "loguru>=0.7.3",
+    "pyglove>=0.4.5",
 ]
 
 [build-system]

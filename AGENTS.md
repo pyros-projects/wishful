@@ -124,6 +124,47 @@ The project uses **three distinct namespaces**:
 
 **Critical for tests and examples:** Always use `wishful.static.*` or `wishful.dynamic.*` for generated modules, never bare `wishful.*` (which would conflict with internal modules).
 
+### Dynamic Import Mechanics (Critical!)
+
+Understanding how `wishful.dynamic.*` imports work is essential for correct usage:
+
+**How Dynamic Modules Work:**
+- Dynamic modules use `DynamicProxyModule`, which wraps callable attributes
+- Each **function call** triggers fresh regeneration with runtime context
+- The `_call_with_runtime` method captures actual arguments and regenerates code based on them
+
+**Correct Usage Patterns:**
+
+```python
+# ✓ CORRECT: Import the module, then call functions on it
+import wishful.dynamic.jokes
+print(wishful.dynamic.jokes.programming_joke())  # Regenerates!
+print(wishful.dynamic.jokes.programming_joke())  # Regenerates again!
+
+# ✓ ALSO CORRECT: Use wishful.reimport() for explicit control
+jokes = wishful.reimport('wishful.dynamic.jokes')
+print(jokes.programming_joke())  # Fresh generation
+
+# ✗ WRONG: Importing individual functions binds them once
+from wishful.dynamic.jokes import programming_joke
+print(programming_joke())  # First call works
+print(programming_joke())  # NO regeneration! Same function!
+```
+
+**Why the Anti-Pattern Fails:**
+- `from wishful.dynamic.X import func` binds `func` to the local namespace **once**
+- Subsequent calls to `func()` just execute the already-bound function object
+- No regeneration occurs because Python doesn't re-execute the import statement
+
+**When to Use `reimport()`:**
+- Explicit control over when regeneration happens
+- Useful in loops where you want fresh generation on each iteration
+- Works with both `wishful.static.*` (bypasses cache) and `wishful.dynamic.*` (same as normal behavior)
+
+**Key Takeaway:** For `wishful.dynamic.*`, always import the **module**, not individual functions.
+
+---
+
 Key properties:
 
 - Uses a custom **import hook** (meta‑path finder + loader) with namespace routing.
@@ -183,6 +224,12 @@ From the root:
   - `safety/`
     - `validator.py` – `validate_code(source, allow_unsafe)` plus `SecurityError`.
     - AST‑based checks for forbidden imports (`os`, `subprocess`, `sys`), forbidden calls (`eval`, `exec`, unsafe `open`, `os.system`, `subprocess.*`, etc.).
+  - `explore/` – multi-variant generation
+    - `__init__.py` – exports `explore`, `ExplorationError`.
+    - `explorer.py` – core `explore()` function for generating and selecting variants.
+    - `strategies.py` – selection strategies (`first_passing`, `best_score`).
+    - `variant.py` – `VariantMetadata` class and metadata wrapper.
+    - `exceptions.py` – `ExplorationError` exception.
   - `ui.py`
     - `spinner(message)` context manager using `rich` to show an optional spinner (controlled by `settings.spinner`).
 
@@ -201,12 +248,14 @@ From the root:
     - `test_safety.py` – security validator rules.
     - `test_types.py` – type registry and serialization (30 tests).
     - `test_namespaces.py` – static vs dynamic namespace behavior (6 tests).
+    - `test_explore.py` – explore() multi-variant generation (22 tests).
 
 - `examples/`
   - `00_quick_start.py` through `06_omg_why.py` – basic usage patterns.
   - `07_typed_outputs.py` – demonstrates type registry with Pydantic, dataclasses, TypedDict.
   - `08_dynamic_vs_static.py` – shows difference between static (cached) and dynamic (runtime-aware) namespaces.
   - `09_context_shenanigans.py` – demonstrates context discovery and import-site hints.
+  - `12_explore.py` – demonstrates `wishful.explore()` for multi-variant generation.
 
 - `docs/ideas/advanced_context_discovery.md`
   - Design/brainstorm document for richer context discovery strategies.
@@ -401,6 +450,167 @@ The LLM will respect both Field constraints (min_length=10, gt=0) AND the docstr
 - **Docstrings influence LLM behavior**: The docstring text (e.g., "Project plan written by master yoda from star wars") is included in the serialized type definition and affects how the LLM generates content (tone, style, domain-specific language)
 - See `examples/07_typed_outputs.py` for comprehensive usage examples
 - See `tests/test_types.py` for 30 tests covering all scenarios
+
+---
+
+## Explore: Multi-Variant Generation
+
+The `wishful.explore()` function generates multiple implementations of a function and helps you select the best one through testing or benchmarking.
+
+### Basic Usage
+
+```python
+import wishful
+
+# Generate 5 variants, return first that passes the test
+best = wishful.explore(
+    "wishful.static.text.extract_emails",
+    variants=5,
+    test=lambda fn: fn("test@example.com") == ["test@example.com"]
+)
+
+# Use it like any other function
+emails = best("Contact us at hello@world.com")
+
+# IMPORTANT: The winning variant is automatically cached!
+# Subsequent `from wishful.static.text import extract_emails` uses the proven winner.
+```
+
+### Key Feature: Winner Caching
+
+When `explore()` finds a winning variant, it **automatically caches the source code** to `.wishful/` just like a regular wishful import would. This means:
+
+1. **First time**: `wishful.explore("wishful.static.text.extract_emails", ...)` generates multiple variants, tests them, selects the best one, and caches it to `.wishful/text.py`.
+2. **Subsequent imports**: `from wishful.static.text import extract_emails` loads the cached winner instantly—no LLM call, no re-exploration.
+
+This makes `explore()` a "smarter" way to populate the cache: instead of generating one implementation and hoping it works, you generate multiple candidates, test them, and cache the **proven** winner.
+
+### API
+
+```python
+def explore(
+    module_path: str,                # e.g., "wishful.static.text.extract_emails"
+    *,
+    variants: int = 5,               # Number of variants to generate
+    test: Callable[[Callable], bool] | None = None,  # Pass/fail filter
+    benchmark: Callable[[Callable], float] | None = None,  # Score function
+    optimize: Literal["first_passing", "fastest", "best_score"] = "first_passing",
+    timeout_per_variant: float = 30.0,
+    return_all: bool = False,        # Return list of all passing variants
+    verbose: bool = True,            # Show rich progress display
+    save_results: bool = True,       # Save CSV to cache_dir/_explore/
+) -> Callable | list[Callable]
+```
+
+### Selection Strategies
+
+- **`first_passing`** (default): Return first variant that passes `test`. Fast, good for CI.
+- **`fastest`** / **`best_score`**: Run all variants, benchmark each, return highest score.
+
+### Examples
+
+```python
+# Benchmark: find fastest implementation
+def benchmark_sort(fn):
+    import time
+    start = time.perf_counter()
+    for _ in range(100):
+        fn(list(range(1000, 0, -1)))
+    return 100 / (time.perf_counter() - start)
+
+fastest = wishful.explore(
+    "wishful.static.algorithms.sort_list",
+    variants=10,
+    benchmark=benchmark_sort,
+    optimize="fastest"
+)
+
+# Combined: test for correctness, benchmark for speed
+best = wishful.explore(
+    "wishful.static.data.parse_json",
+    variants=5,
+    test=lambda fn: fn('{"a":1}') == {"a": 1},
+    benchmark=lambda fn: measure_speed(fn),
+    optimize="fastest"
+)
+
+# Get all passing variants
+all_variants = wishful.explore(
+    "wishful.static.math.fibonacci",
+    variants=5,
+    test=lambda fn: fn(10) == 55,
+    return_all=True
+)
+```
+
+### Metadata
+
+Returned functions have `__wishful_metadata__` and `__wishful_source__` attributes:
+
+```python
+fn = wishful.explore("wishful.static.text.slugify", variants=3)
+print(fn.__wishful_metadata__)
+# {'module': 'wishful.static.text', 'function': 'slugify', 'variant_index': 1, ...}
+print(fn.__wishful_source__)
+# def slugify(text): ...
+```
+
+### Error Handling
+
+```python
+try:
+    fn = wishful.explore("wishful.static.impossible.task", variants=5, test=lambda fn: False)
+except wishful.ExplorationError as e:
+    print(f"Tried {e.attempts} variants, none passed")
+    print(f"Failures: {e.failures}")
+```
+
+### Progress Display & Logging
+
+When `verbose=True` (default), explore shows a beautiful rich progress display:
+
+```
+╭────────── 🔍 wishful.explore → wishful.static.text.extract_emails ───────────╮
+│    Exploring extract_emails ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 3/3 • 0:01:22     │
+│  Strategy:  first_passing                                                    │
+│  Passed:    1                                                                │
+│  Failed:    2                                                                │
+│                                   Variants                                   │
+│  ┏━━━━━┳━━━━━━━━━━━━┳━━━━━━━━━┳━━━━━━━━━━━━┳━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓  │
+│  ┃   # ┃ Status     ┃    Time ┃      Score ┃ Info                         ┃  │
+│  ┡━━━━━╇━━━━━━━━━━━━╇━━━━━━━━━╇━━━━━━━━━━━━╇━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┩  │
+│  │   0 │ error      │   21.5s │          - │ Compile: Failed to compile   │  │
+│  │   1 │ timeout    │     ... │          - │ Generation timed out         │  │
+│  │   2 │ passed     │   29.2s │          - │ import re from typing import │  │
+│  └─────┴────────────┴─────────┴────────────┴──────────────────────────────┘  │
+╰──────────────────────────────────────────────────────────────────────────────╯
+```
+
+When `save_results=True` (default), results are saved to `cache_dir/_explore/`:
+- `{function}_{timestamp}.csv` — Full results for downstream analysis
+- `{function}_{timestamp}_summary.txt` — Human-readable summary
+
+### Module Structure
+
+```
+src/wishful/explore/
+├── __init__.py      # Public API: explore, ExplorationError
+├── explorer.py      # Core explore() - async internally, sync API
+├── strategies.py    # Selection strategies (first_passing, best_score)
+├── variant.py       # VariantMetadata and wrapper
+├── exceptions.py    # ExplorationError
+└── progress.py      # Rich Live progress display and CSV logging
+```
+
+### Implementation Notes
+
+- **Async internally**: `explore()` is sync for ease of use but uses `asyncio` and `litellm.acompletion()` internally for responsive UI updates during generation.
+- **Reusable event loop**: Uses a cached event loop to avoid litellm's `LoggingWorker` issues with multiple `asyncio.run()` calls.
+- **Winner caching**: After selection, writes the winning source to `.wishful/` via `cache.manager.write_cached()`.
+- **Conditional Score column**: The Rich display hides the Score column when no benchmark is provided.
+
+- See `examples/12_explore.py` for comprehensive usage examples
+- See `tests/test_explore.py` for 22 tests covering all scenarios
 
 ---
 

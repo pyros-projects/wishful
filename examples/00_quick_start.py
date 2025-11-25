@@ -1,11 +1,9 @@
 """Executable examples for wishful.
 
-Run with: `python examples.py`
-Each example shows a small end-to-end flow. Requires API env vars set
-per README (or WISHFUL_FAKE_LLM=1 for offline stub generation).
+Run with: `uv run python examples/00_quick_start.py`
+Each example shows a small end-to-end flow. Requires API env vars set per README.
 """
 
-import os
 from pathlib import Path
 
 import wishful
@@ -42,30 +40,31 @@ def example_nginx_logs():
     records = parse_nginx_logs(sample)
     print(records)
 
+
 def example_read_README():
     heading("Example: read README and count headers")
     # desired: loads text and counts headers
     from wishful.static.text import count_headers
 
-    
     records = count_headers(path="README.md")
     print(records)
+
 
 def example_primes():
     heading("Example: functions inside functions - sum of primes")
     from wishful.static.numbers import primes_from_to, sum_list
 
-    
-    sum = sum_list(list=primes_from_to(1, 100))
-    print(sum)
+    total = sum_list(list=primes_from_to(1, 100))
+    print(total)
 
 
 def example_story():
     heading("Example: story generation with setting")
     from wishful.static.story import cosmic_horror_intro
 
-    
-    intro = cosmic_horror_intro(setting="a deserted amusement park", word_count_at_least=100)
+    intro = cosmic_horror_intro(
+        setting="a deserted amusement park", word_count_at_least=100
+    )
     print(intro)
 
 
@@ -81,10 +80,6 @@ def example_cache_ops(tmp_dir: Path):
 
 
 def main():
-    # Make output deterministic in CI if desired
-    if os.getenv("WISHFUL_FAKE_LLM") == "1":
-        print("Using fake LLM stub responses (WISHFUL_FAKE_LLM=1)")
-
     example_extract_emails()
     example_date_normalizer()
     example_nginx_logs()

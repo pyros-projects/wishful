@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import os
 from typing import Sequence
 
@@ -34,12 +35,38 @@ def generate_module_code(
     function_output_types: dict[str, str] | None = None,
     mode: str | None = None,
 ) -> str:
-    """Call the LLM (or fake stub) to generate module source code."""
+    """Call the LLM (or fake stub) to generate module source code (sync version)."""
 
     if _FAKE_MODE:
         return _fake_response(functions)
 
     response = _call_llm(
+        module, functions, context, type_schemas, function_output_types, mode
+    )
+    content = _extract_content(response)
+    return strip_code_fences(content).strip()
+
+
+async def agenerate_module_code(
+    module: str,
+    functions: Sequence[str],
+    context: str | None,
+    type_schemas: dict[str, str] | None = None,
+    function_output_types: dict[str, str] | None = None,
+    mode: str | None = None,
+) -> str:
+    """Call the LLM (or fake stub) to generate module source code (async version).
+    
+    This is the preferred method for explore() and other features that need
+    concurrent operations or responsive UI updates.
+    """
+
+    if _FAKE_MODE:
+        # Small delay to simulate async behavior in fake mode
+        await asyncio.sleep(0.01)
+        return _fake_response(functions)
+
+    response = await _acall_llm(
         module, functions, context, type_schemas, function_output_types, mode
     )
     content = _extract_content(response)
@@ -54,9 +81,58 @@ def _call_llm(
     function_output_types: dict[str, str] | None = None,
     mode: str | None = None,
 ):
+    """Synchronous LLM call."""
     messages = build_messages(
         module, functions, context, type_schemas, function_output_types, mode
     )
+    _log_llm_call(module, mode, functions, context, type_schemas, function_output_types, messages)
+    
+    try:
+        return litellm.completion(
+            model=settings.model,
+            messages=messages,
+            temperature=settings.temperature,
+            max_tokens=settings.max_tokens,
+        )
+    except Exception as exc:  # pragma: no cover - network path not executed in tests
+        raise GenerationError(f"LLM call failed: {exc}") from exc
+
+
+async def _acall_llm(
+    module: str,
+    functions: Sequence[str],
+    context: str | None,
+    type_schemas: dict[str, str] | None = None,
+    function_output_types: dict[str, str] | None = None,
+    mode: str | None = None,
+):
+    """Asynchronous LLM call using litellm.acompletion()."""
+    messages = build_messages(
+        module, functions, context, type_schemas, function_output_types, mode
+    )
+    _log_llm_call(module, mode, functions, context, type_schemas, function_output_types, messages)
+    
+    try:
+        return await litellm.acompletion(
+            model=settings.model,
+            messages=messages,
+            temperature=settings.temperature,
+            max_tokens=settings.max_tokens,
+        )
+    except Exception as exc:  # pragma: no cover - network path not executed in tests
+        raise GenerationError(f"LLM call failed: {exc}") from exc
+
+
+def _log_llm_call(
+    module: str,
+    mode: str | None,
+    functions: Sequence[str],
+    context: str | None,
+    type_schemas: dict[str, str] | None,
+    function_output_types: dict[str, str] | None,
+    messages: list,
+) -> None:
+    """Log LLM call details."""
     logger.debug(
         "LLM call module={} mode={} model={} temp={} max_tokens={} functions={} context_len={} type_schemas={} output_types={} preview={}",
         module,
@@ -76,15 +152,6 @@ def _call_llm(
     if len(prompt_text) > 4000:
         prompt_text = prompt_text[:4000] + "…"
     logger.debug("LLM prompt for {}:\n{}", module, prompt_text)
-    try:
-        return litellm.completion(
-            model=settings.model,
-            messages=messages,
-            temperature=settings.temperature,
-            max_tokens=settings.max_tokens,
-        )
-    except Exception as exc:  # pragma: no cover - network path not executed in tests
-        raise GenerationError(f"LLM call failed: {exc}") from exc
 
 
 def _extract_content(response) -> str:

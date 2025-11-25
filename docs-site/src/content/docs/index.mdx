@@ -37,6 +37,7 @@ print(emails) # prints ["team@example.com","sales@demo.dev"] probably...`}
       <div class="hero-pill">LLM-generated modules with real files on disk</div>
       <div class="hero-pill">Static (cached) and dynamic (runtime-aware) imports</div>
       <div class="hero-pill">Type- and context-aware prompts</div>
+      <div class="hero-pill">Multi-variant exploration with automatic winner caching</div>
     </div>
 
     <p class="hero-footnote">
@@ -75,7 +76,14 @@ print(emails) # prints ["team@example.com","sales@demo.dev"] probably...`}
     <h4>Context-aware by default</h4>
     <p>
       wishful forwards nearby comments and call sites into the prompt, so
-      “parse nginx logs into dicts” actually does what it says on the tin.
+      "parse nginx logs into dicts" actually does what it says on the tin.
+    </p>
+  </div>
+  <div class="aha-card">
+    <h4>Explore: test before you trust</h4>
+    <p>
+      Generate multiple variants, test each one, keep the winner.
+      <code>wishful.explore()</code> caches <em>proven</em> code, not just generated code.
     </p>
   </div>
 </div>
@@ -84,6 +92,7 @@ print(emails) # prints ["team@example.com","sales@demo.dev"] probably...`}
 
 - **Quickstart** — pip install, your first wish, and fake-LLM mode.
 - **How it works** — the import hook, cache layout, static vs dynamic.
+- **Explore** — generate multiple variants, test them, keep the winner.
 - **Configuration & CLI** — knobs you can turn from code or env vars.
 - **Types** — using <code>@wishful.type</code> to nudge the model.
 - **Advanced context discovery** — how wishful harvests hints from your code.

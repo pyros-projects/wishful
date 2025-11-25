@@ -37,6 +37,8 @@ Removes the cached module so the next import triggers fresh generation.
 
 ### Pro tips
 
+_Small but mighty._
+
 - These CLI helpers mirror the Python API: `inspect_cache`, `clear_cache`, `regenerate`.
 - Cache paths strip both `static` and `dynamic` prefixes, so dynamic and static share the same cache file.
-- Logs live under `<cache_dir>/_logs/`; clearing the cache nukes them too.
+- Logs live under `<cache_dir>/_logs/`; clearing the cache nukes them too. (No survivors.)

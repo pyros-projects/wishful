@@ -327,6 +327,15 @@ wheels = [
 ]
 
 [[package]]
+name = "docstring-parser"
+version = "0.17.0"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/b2/9d/c3b43da9515bd270df0f80548d9944e389870713cc1fe2b8fb35fe2bcefd/docstring_parser-0.17.0.tar.gz", hash = "sha256:583de4a309722b3315439bb31d64ba3eebada841f2e2cee23b99df001434c912", size = 27442, upload-time = "2025-07-21T07:35:01.868Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/55/e2/2537ebcff11c1ee1ff17d8d0b6f4db75873e3b0fb32c2d4a2ee31ecb310a/docstring_parser-0.17.0-py3-none-any.whl", hash = "sha256:cf2569abd23dce8099b300f9b4fa8191e9582dda731fd533daf54c4551658708", size = 36896, upload-time = "2025-07-21T07:35:00.684Z" },
+]
+
+[[package]]
 name = "fastuuid"
 version = "0.14.0"
 source = { registry = "https://pypi.org/simple" }
@@ -1187,6 +1196,19 @@ wheels = [
 ]
 
 [[package]]
+name = "pyglove"
+version = "0.4.5"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "docstring-parser" },
+    { name = "termcolor" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/b8/92/74fe4ff7e0e65d6b256ea482c41006571d50b293ae350736dc4f2e5b1817/pyglove-0.4.5.tar.gz", hash = "sha256:5dc0f2089e42df18491807b65e5e3d22cceb98b3a7d728d7844efd622ffbe495", size = 533303, upload-time = "2025-07-15T19:08:32.053Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/3f/7a/0299f48f262afc0218699ee52bbe63fad01a6ebf285804d315ace8cb5360/pyglove-0.4.5-py3-none-any.whl", hash = "sha256:fe22612d78217b193bcbb4e2956d4ca27685e60157accaa3b305902e2eae0cdb", size = 698895, upload-time = "2025-07-15T19:08:29.172Z" },
+]
+
+[[package]]
 name = "pygments"
 version = "2.19.2"
 source = { registry = "https://pypi.org/simple" }
@@ -1557,6 +1579,15 @@ wheels = [
 ]
 
 [[package]]
+name = "termcolor"
+version = "3.2.0"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/87/56/ab275c2b56a5e2342568838f0d5e3e66a32354adcc159b495e374cda43f5/termcolor-3.2.0.tar.gz", hash = "sha256:610e6456feec42c4bcd28934a8c87a06c3fa28b01561d46aa09a9881b8622c58", size = 14423, upload-time = "2025-10-25T19:11:42.586Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/f9/d5/141f53d7c1eb2a80e6d3e9a390228c3222c27705cbe7f048d3623053f3ca/termcolor-3.2.0-py3-none-any.whl", hash = "sha256:a10343879eba4da819353c55cb8049b0933890c2ebf9ad5d3ecd2bb32ea96ea6", size = 7698, upload-time = "2025-10-25T19:11:41.536Z" },
+]
+
+[[package]]
 name = "tiktoken"
 version = "0.12.0"
 source = { registry = "https://pypi.org/simple" }
@@ -1694,12 +1725,13 @@ wheels = [
 
 [[package]]
 name = "wishful"
-version = "0.2.0"
+version = "0.2.3"
 source = { editable = "." }
 dependencies = [
     { name = "litellm" },
     { name = "loguru" },
     { name = "pydantic" },
+    { name = "pyglove" },
     { name = "python-dotenv" },
     { name = "rich" },
 ]
@@ -1720,6 +1752,7 @@ requires-dist = [
     { name = "litellm", specifier = ">=1.40.0" },
     { name = "loguru", specifier = ">=0.7.3" },
     { name = "pydantic", specifier = ">=2.12.4" },
+    { name = "pyglove", specifier = ">=0.4.5" },
     { name = "python-dotenv", specifier = ">=1.0.1" },
     { name = "rich", specifier = ">=13.7.0" },
 ]

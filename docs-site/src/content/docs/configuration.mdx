@@ -5,38 +5,66 @@ description: Toggle behavior from code or env vars without summoning a yak.
 
 ## From Python
 
+_Because even genies need settings._
+
 ```python
 import wishful
 
 wishful.configure(
-    model="gpt-4.1-mini",
-    cache_dir=".wishful",
-    review=False,
-    debug=True,
-    allow_unsafe=False,
-    spinner=False,
-    max_tokens=4096,
-    temperature=0.6,
+    model="openai/gpt-5",          # Switch models - use litellm model IDs (default: "azure/gpt-4.1")
+    cache_dir="/tmp/.wishful",     # Cache directory for generated modules (default: ".wishful")
+    spinner=False,                 # Show/hide the "generating..." spinner (default: True)
+    review=True,                   # Review code before execution (default: False)
+    allow_unsafe=False,            # Disable safety checks - dangerous! (default: False)
+    temperature=0.7,               # LLM sampling temperature (default: 1.0)
+    max_tokens=8000,               # Maximum LLM response tokens (default: 4096)
+    debug=True,                    # Enable debug logging (default: False)
+    log_level="INFO",              # Logging level: DEBUG, INFO, WARNING, ERROR (default: WARNING)
+    log_to_file=True,              # Write logs to cache_dir/_logs/ (default: True)
+    system_prompt="Custom prompt", # Override the system prompt for LLM (advanced)
 )
+
+# Context radius is configured separately (it likes to be special)
+wishful.set_context_radius(6)  # Lines of context around imports AND call sites (default: 3)
 ```
 
-- `configure` mutates a shared singleton (`builtins._wishful_settings`), so changes stick across reloads.
-- `reset_defaults()` snaps back to env-driven defaults.
+**All Configuration Options:**
+
+_Your wish, your rules._
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `model` | `str` | `"azure/gpt-4.1"` | LLM model identifier (litellm format) |
+| `cache_dir` | `str \| Path` | `".wishful"` | Directory for cached generated modules |
+| `review` | `bool` | `False` | Prompt for approval before executing generated code |
+| `spinner` | `bool` | `True` | Show spinner during LLM generation |
+| `allow_unsafe` | `bool` | `False` | Disable safety validation (use with caution!) |
+| `temperature` | `float` | `1.0` | LLM sampling temperature (0.0-2.0) |
+| `max_tokens` | `int` | `4096` | Maximum tokens for LLM response |
+| `debug` | `bool` | `False` | Enable debug mode (sets log_level to DEBUG) |
+| `log_level` | `str` | `"WARNING"` | Logging level (DEBUG, INFO, WARNING, ERROR) |
+| `log_to_file` | `bool` | `True` | Write logs to `{cache_dir}/_logs/` |
+| `system_prompt` | `str` | _(see source)_ | Custom system prompt for LLM (advanced) |
 
 ## Environment variables (loaded via python-dotenv)
 
-| Variable | Effect | Default |
-| --- | --- | --- |
-| `WISHFUL_MODEL` / `DEFAULT_MODEL` | LLM model id | `azure/gpt-4.1` |
-| `WISHFUL_CACHE_DIR` | Cache root | `.wishful` |
-| `WISHFUL_REVIEW` | `"1"` to prompt/approve code | `0` |
-| `WISHFUL_DEBUG` | `"1"` enables extra logging | `0` |
-| `WISHFUL_UNSAFE` | `"1"` disables safety checks | `0` |
-| `WISHFUL_SPINNER` | `"0"` disables spinner | `1` |
-| `WISHFUL_MAX_TOKENS` | Max tokens per response | `4096` |
-| `WISHFUL_TEMPERATURE` | Sampling temperature | `1` |
-| `WISHFUL_CONTEXT_RADIUS` | Lines of surrounding code to capture | `3` |
-| `WISHFUL_FAKE_LLM` | `"1"` → deterministic stub generation | `0` |
+_The .env file: where wishes go before they're spoken aloud._
+
+All settings can also be configured via environment variables:
+
+- `WISHFUL_MODEL` or `DEFAULT_MODEL` - LLM model identifier
+- `WISHFUL_CACHE_DIR` - Cache directory path
+- `WISHFUL_REVIEW` - Set to `"1"` to enable review mode
+- `WISHFUL_DEBUG` - Set to `"1"` to enable debug mode
+- `WISHFUL_UNSAFE` - Set to `"1"` to disable safety checks
+- `WISHFUL_SPINNER` - Set to `"0"` to disable spinner
+- `WISHFUL_MAX_TOKENS` - Maximum tokens (integer)
+- `WISHFUL_TEMPERATURE` - Sampling temperature (float)
+- `WISHFUL_CONTEXT_RADIUS` - Context lines around imports and call sites (integer)
+- `WISHFUL_LOG_LEVEL` - Logging level (DEBUG, INFO, WARNING, ERROR)
+- `WISHFUL_LOG_TO_FILE` - Set to `"0"` to disable file logging
+- `WISHFUL_SYSTEM_PROMPT` - Custom system prompt
+- `WISHFUL_FAKE_LLM` - Set to `"1"` for deterministic stub generation (testing)
 
 ## Safety
 
