@@ -1,13 +1,12 @@
 """Example: Simple API client generation with wishful.
 
 This demonstrates using context hints to generate a basic HTTP client.
+
+Run with: `uv run python examples/05_api_client.py`
 """
 
 # Desired: make a GET request with headers, parse JSON response, handle errors gracefully
 from wishful.static.http import fetch_json, post_json
-
-# Note: This will generate a basic HTTP client
-# In fake mode, it returns stub data
 
 try:
     # Fetch JSON from a URL

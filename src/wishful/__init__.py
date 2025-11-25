@@ -10,6 +10,7 @@ from wishful.cache import manager as cache
 from wishful.config import configure, reset_defaults, settings
 from wishful.core.discovery import set_context_radius as _set_context_radius
 from wishful.core.finder import install as install_finder
+from wishful.explore import ExplorationError, explore
 from wishful.llm.client import GenerationError
 from wishful.safety.validator import SecurityError
 from wishful.types import type as type_decorator
@@ -28,6 +29,8 @@ __all__ = [
     "reset_defaults",
     "SecurityError",
     "GenerationError",
+    "ExplorationError",
+    "explore",
     "type",
 ]
 

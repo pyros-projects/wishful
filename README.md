@@ -8,7 +8,7 @@
   <a href="https://badge.fury.io/py/wishful"><img src="https://badge.fury.io/py/wishful.svg" alt="PyPI version"></a>
   <a href="https://www.python.org/downloads/"><img src="https://img.shields.io/badge/python-3.12+-blue.svg" alt="Python 3.12+"></a>
   <a href="https://opensource.org/licenses/MIT"><img src="https://img.shields.io/badge/License-MIT-yellow.svg" alt="License: MIT"></a>
-  <a href="https://github.com/pyros-projects/wishful"><img src="https://img.shields.io/badge/tests-83%20passed-brightgreen.svg" alt="Tests"></a>
+  <a href="https://github.com/pyros-projects/wishful"><img src="https://img.shields.io/badge/tests-112%20passed-brightgreen.svg" alt="Tests"></a>
   <a href="https://github.com/pyros-projects/wishful"><img src="https://img.shields.io/badge/coverage-80%25-green.svg" alt="Coverage"></a>
   <a href="https://github.com/astral-sh/ruff"><img src="https://img.shields.io/badge/code%20style-ruff-000000.svg" alt="Code style: ruff"></a>
 </p>
@@ -164,6 +164,75 @@ my_intro = magical_content.create_a_cosmic_horrorstory_intro()
 - 👉 **Use for**: creative content, experiments, testing variations
 
 **Note**: Dynamic imports always regenerate and never use the cache, even if a cached version exists. This ensures fresh, context-aware results every time.
+
+---
+
+## 🔍 Explore: When One Wish Isn't Enough
+
+_Sometimes the genie needs a few tries to get it right._
+
+What if instead of trusting the first implementation, you could generate **multiple variants**, test them all, and keep only the winner? Enter `wishful.explore()`:
+
+```python
+import wishful
+
+# Generate 5 implementations, keep the first one that passes
+parser = wishful.explore(
+    "wishful.static.text.extract_emails",
+    variants=5,
+    test=lambda fn: fn("test@example.com") == ["test@example.com"]
+)
+
+# The winner is cached! Future imports use the proven implementation.
+from wishful.static.text import extract_emails  # ← Uses the battle-tested winner
+```
+
+**The magic**: `explore()` generates multiple candidates, tests each one, and **caches the winner** to `.wishful/`. Subsequent imports skip the exploration entirely—you get the proven implementation instantly.
+
+### Find the Fastest Implementation
+
+```python
+def benchmark_sort(fn):
+    import time
+    start = time.perf_counter()
+    for _ in range(100):
+        fn(list(range(1000, 0, -1)))
+    return 100 / (time.perf_counter() - start)  # ops/sec
+
+# Generate 10 variants, benchmark each, return the fastest
+fastest = wishful.explore(
+    "wishful.static.algorithms.sort_list",
+    variants=10,
+    benchmark=benchmark_sort,
+    optimize="fastest"
+)
+
+print(fastest.__wishful_metadata__)
+# {'variant_index': 7, 'benchmark_score': 814106.86, ...}
+```
+
+### Beautiful Progress Display
+
+`explore()` shows a real-time Rich display while it works:
+
+```
+╭────────── 🔍 wishful.explore → wishful.static.text.extract_emails ───────────╮
+│    Exploring extract_emails ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 3/3 • 0:00:03     │
+│  Strategy:  first_passing                                                    │
+│  Passed:    2                                                                │
+│  Failed:    1                                                                │
+│                                   Variants                                   │
+│  ┏━━━━━━┳━━━━━━━━━━━━┳━━━━━━━━━┳━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓  │
+│  ┃    # ┃ Status     ┃    Time ┃ Info                                     ┃  │
+│  ┡━━━━━━╇━━━━━━━━━━━━╇━━━━━━━━━╇━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┩  │
+│  │    0 │ passed     │    1.4s │ def extract_emails(text: str) -> list[st │  │
+│  │    1 │ failed     │    0.8s │ def extract_emails(s): return re.findall │  │
+│  │    2 │ passed     │    1.2s │ import re  def extract_emails(text): ... │  │
+│  └──────┴────────────┴─────────┴──────────────────────────────────────────┘  │
+╰──────────────────────────────────────────────────────────────────────────────╯
+```
+
+Results are also saved to CSV in `.wishful/_explore/` for downstream analysis. Because data-driven wishful thinking is still wishful thinking. 📊
 
 ---
 
@@ -402,14 +471,16 @@ wishful/
 │   ├── config.py         # Configuration
 │   ├── cache/            # Cache management
 │   ├── core/             # Import hooks & discovery
-│   ├── llm/              # LLM integration
+│   ├── llm/              # LLM integration (sync + async)
 │   ├── types/            # Type registry system
+│   ├── explore/          # Multi-variant generation & selection
 │   └── safety/           # Safety validation
-├── tests/                # Test suite (83 tests, 80% coverage)
+├── tests/                # Test suite (112 tests)
 ├── examples/             # Usage examples
 │   ├── 07_typed_outputs.py    # Type registry showcase
 │   ├── 08_dynamic_vs_static.py # Static vs dynamic modes
-│   └── 09_context_shenanigans.py # Context discovery
+│   ├── 09_context_shenanigans.py # Context discovery
+│   └── 12_explore.py          # Multi-variant exploration
 └── pyproject.toml        # Project config
 ```
 
@@ -437,6 +508,12 @@ A: The LLM will do its best. Results may vary. Hilarity may ensue.
 
 **Q: Is this just lazy programming?**  
 A: It's not lazy. It's _efficient wishful thinking_. 😎
+
+**Q: What if the LLM generates multiple bad implementations?**  
+A: That's what `wishful.explore()` is for! Generate 5-10 variants, test each one, keep the winner. It's like having a code review, but automated and with more variants than your team has patience for.
+
+**Q: Does explore() cache the winning implementation?**  
+A: Yes! The winning variant gets cached to `.wishful/` just like a regular import. Future imports use the proven winner—no re-exploration needed.
 
 ---
 

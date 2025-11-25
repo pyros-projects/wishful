@@ -62,4 +62,29 @@ print(programming_joke())  # Fresh generation
 - `wishful.dynamic.foo` → `.wishful/foo.py` (same cache file) plus dynamic snapshot `.wishful/_dynamic/foo.py`
 - CLI helpers (`wishful inspect/clear/regen`) and Python helpers (`inspect_cache`, `clear_cache`, `regenerate`) manage these paths.
 
-That’s the core loop. Everything else (CLI, types, logging) builds on this. For knobs you can turn, see [Configuration](/configuration).
+That's the core loop. Everything else (CLI, types, logging) builds on this.
+
+### 6) Explore: multi-variant generation
+
+`wishful.explore()` is a smarter way to populate the cache:
+
+- Generates **multiple** implementations of a function
+- Tests each one against your criteria
+- Benchmarks them (optional) to find the fastest
+- **Caches the winner** to `.wishful/` like a regular import
+
+```python
+# Generate 5 variants, test each, cache the winner
+parser = wishful.explore(
+    "wishful.static.text.extract_emails",
+    variants=5,
+    test=lambda fn: fn("test@example.com") == ["test@example.com"]
+)
+
+# Future imports use the proven winner
+from wishful.static.text import extract_emails  # ← No re-exploration
+```
+
+Uses async internally (`litellm.acompletion()`) for responsive UI with a beautiful Rich progress display. See [Explore](/explore) for the full tour.
+
+For knobs you can turn, see [Configuration](/configuration).

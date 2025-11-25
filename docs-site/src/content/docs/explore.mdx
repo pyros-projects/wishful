@@ -1,0 +1,209 @@
+---
+title: Explore
+description: Generate multiple variants and keep the winner.
+---
+
+## The Problem with One-Shot Generation
+
+_"What if the LLM gets it wrong?"_
+
+That's the eternal question with AI-generated code. You ask for a function, the model delivers _something_, and you either trust it or manually verify it. Not exactly a robust workflow.
+
+Enter `wishful.explore()` — the answer to "what if we just... tried a few times?"
+
+## How It Works
+
+Instead of generating one implementation and hoping for the best, `explore()`:
+
+1. **Generates multiple variants** (default: 5)
+2. **Tests each one** against your criteria
+3. **Benchmarks them** (optional) to find the fastest
+4. **Caches the winner** to `.wishful/` like a regular import
+
+```python
+import wishful
+
+# Generate 5 variants, keep the first one that passes
+parser = wishful.explore(
+    "wishful.static.text.extract_emails",
+    variants=5,
+    test=lambda fn: fn("test@example.com") == ["test@example.com"]
+)
+
+# The winner is cached! Future imports use the proven implementation.
+from wishful.static.text import extract_emails  # ← Battle-tested winner
+```
+
+The function you get back has been **tested**. The cache contains **proven** code. That's the whole point.
+
+## Selection Strategies
+
+### `first_passing` (default)
+
+Returns the first variant that passes your test. Fast, good for CI, stops as soon as something works.
+
+```python
+fn = wishful.explore(
+    "wishful.static.math.fibonacci",
+    variants=5,
+    test=lambda fn: fn(10) == 55,
+    optimize="first_passing"  # Stop at first success
+)
+```
+
+### `fastest` / `best_score`
+
+Runs **all** variants, benchmarks each, returns the one with the highest score. Use this when you care about performance, not just correctness.
+
+```python
+def benchmark_sort(fn):
+    import time
+    start = time.perf_counter()
+    for _ in range(100):
+        fn(list(range(1000, 0, -1)))
+    return 100 / (time.perf_counter() - start)  # ops/sec
+
+fastest = wishful.explore(
+    "wishful.static.algorithms.sort_list",
+    variants=10,
+    benchmark=benchmark_sort,
+    optimize="fastest"
+)
+
+print(f"Best score: {fastest.__wishful_metadata__['benchmark_score']:.0f} ops/sec")
+```
+
+## Real-Time Progress Display
+
+When `verbose=True` (the default), you get a beautiful Rich display:
+
+```
+╭────────── 🔍 wishful.explore → wishful.static.text.extract_emails ───────────╮
+│    Exploring extract_emails ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 5/5 • 0:00:04     │
+│  Strategy:      fastest                                                      │
+│  Passed:        4                                                            │
+│  Failed:        1                                                            │
+│  Best Score:    814106.86                                                    │
+│  Best Variant:  #3                                                           │
+│                                   Variants                                   │
+│  ┏━━━━━┳━━━━━━━━━━━━┳━━━━━━━━━┳━━━━━━━━━━━━┳━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓  │
+│  ┃   # ┃ Status     ┃    Time ┃      Score ┃ Info                         ┃  │
+│  ┡━━━━━╇━━━━━━━━━━━━╇━━━━━━━━━╇━━━━━━━━━━━━╇━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┩  │
+│  │   0 │ passed     │    0.7s │  613496.97 │ def sort_integers(numbers: … │  │
+│  │   1 │ failed     │    1.4s │          - │ TypeError: unsupported opera │  │
+│  │   2 │ passed     │    0.6s │  621118.11 │ def sort_integers(numbers: … │  │
+│  │   3 │ passed     │    0.6s │  814106.86 │ def sort_integers(numbers: … │  │
+│  │   4 │ passed     │    0.7s │  749523.98 │ def sort_integers(numbers: … │  │
+│  └─────┴────────────┴─────────┴────────────┴──────────────────────────────┘  │
+╰──────────────────────────────────────────────────────────────────────────────╯
+```
+
+Note: The Score column only appears when you provide a `benchmark` function. Clean display, no clutter.
+
+## Winner Caching: The Key Insight
+
+Here's the magic: **the winner gets cached**.
+
+When `explore()` finds a winning variant, it writes the source code to `.wishful/` exactly like a regular wishful import would. This means:
+
+```python
+# First time: Explore, test, select winner, cache it
+parser = wishful.explore("wishful.static.text.extract_emails", ...)
+
+# Any time after: Just use it (no exploration, instant import)
+from wishful.static.text import extract_emails
+```
+
+The exploration happens **once**. The cache stores the **proven** code. Every subsequent import is just Python loading a regular `.py` file.
+
+Think of `explore()` as a smarter way to populate the cache — instead of blindly trusting the LLM's first attempt, you're caching code that actually passed your tests.
+
+## API Reference
+
+```python
+def explore(
+    module_path: str,                # e.g., "wishful.static.text.extract_emails"
+    *,
+    variants: int = 5,               # Number of variants to generate
+    test: Callable | None = None,    # Pass/fail filter (returns bool)
+    benchmark: Callable | None = None,  # Score function (returns float, higher=better)
+    optimize: str = "first_passing", # "first_passing", "fastest", or "best_score"
+    timeout_per_variant: float = 30.0,  # Max seconds per generation
+    return_all: bool = False,        # Return list of all passing variants
+    verbose: bool = True,            # Show progress display
+    save_results: bool = True,       # Save CSV to cache_dir/_explore/
+) -> Callable | list[Callable]
+```
+
+## Metadata & Introspection
+
+Every returned function has metadata attached:
+
+```python
+fn = wishful.explore("wishful.static.text.slugify", variants=3)
+
+print(fn.__wishful_metadata__)
+# {'module': 'wishful.static.text', 'function': 'slugify', 
+#  'variant_index': 1, 'generation_time': 1.23, 'benchmark_score': 42.0}
+
+print(fn.__wishful_source__)
+# def slugify(text):
+#     """Convert text to URL-friendly slug."""
+#     return text.lower().replace(' ', '-')
+```
+
+## Error Handling
+
+When no variant passes, you get `ExplorationError` with details:
+
+```python
+try:
+    fn = wishful.explore(
+        "wishful.static.impossible.magic",
+        variants=5,
+        test=lambda fn: fn() == "impossible"
+    )
+except wishful.ExplorationError as e:
+    print(f"Tried {e.attempts} variants, none passed")
+    print(f"Failures: {e.failures}")
+```
+
+## CSV Logging
+
+When `save_results=True` (default), exploration results are saved to `.wishful/_explore/`:
+
+- `{function}_{timestamp}.csv` — Full results for downstream analysis
+- `{function}_{timestamp}_summary.txt` — Human-readable summary
+
+Perfect for tracking exploration history, debugging, or feeding into other tools.
+
+## Silent Mode
+
+Don't want the fancy display? Set `verbose=False`:
+
+```python
+fn = wishful.explore(
+    "wishful.static.math.fibonacci",
+    variants=3,
+    test=lambda fn: fn(10) == 55,
+    verbose=False  # Shhh
+)
+```
+
+## When to Use Explore
+
+Use `explore()` when:
+
+- ✅ You need **confidence** the generated code actually works
+- ✅ You want to find the **fastest** implementation
+- ✅ You're building something that will be imported many times
+- ✅ You want to **audit** multiple approaches
+
+Stick with regular imports when:
+
+- ✅ You're prototyping and don't care about edge cases yet
+- ✅ The function is simple enough that the LLM probably gets it right
+- ✅ You'll manually review the cache anyway
+
+Remember: `explore()` is just a smarter way to populate the cache. Once the winner is cached, you're back to regular Python imports. No magic, no overhead, just proven code.
+
