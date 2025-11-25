@@ -207,3 +207,31 @@ Stick with regular imports when:
 
 Remember: `explore()` is just a smarter way to populate the cache. Once the winner is cached, you're back to regular Python imports. No magic, no overhead, just proven code.
 
+## Advanced: LLMs Judging LLMs
+
+Want to go deeper? Check out `examples/13_explore_advanced.py` for truly wild techniques:
+
+- **LLM-as-Judge**: Use `wishful.dynamic` as the scoring function — the LLM evaluates code quality!
+- **Code Golf**: Find the shortest implementation that still passes tests
+- **Self-Improving Loops**: Use round 1's winner to benchmark round 2
+- **Multi-Objective Optimization**: Combine speed, brevity, and quality scores
+- **The Gauntlet**: Tackle real-world challenges like email validation
+
+```python
+# LLM judges LLM-generated code. Very meta.
+def llm_code_scorer(fn):
+    source = fn.__wishful_source__
+    import wishful.dynamic.code_review as reviewer
+    return reviewer.rate_code_quality(source)
+
+winner = wishful.explore(
+    "wishful.static.text.slugify",
+    variants=5,
+    test=lambda fn: fn("Hello World") == "hello-world",
+    benchmark=llm_code_scorer,  # ← LLM scores each variant!
+    optimize="best_score",
+)
+```
+
+It's wishful thinking all the way down. 🐢
+

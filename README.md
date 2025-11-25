@@ -234,6 +234,16 @@ print(fastest.__wishful_metadata__)
 
 Results are also saved to CSV in `.wishful/_explore/` for downstream analysis. Because data-driven wishful thinking is still wishful thinking. 📊
 
+### Going Deeper: LLMs Judging LLMs
+
+Want to get _really_ wild? Check out `examples/13_explore_advanced.py` for:
+- **LLM-as-Judge**: Use `wishful.dynamic` to score code quality
+- **Code Golf**: Find the shortest working implementation
+- **Self-Improving Loops**: The winner helps evaluate the next round
+- **Multi-Objective Optimization**: Speed × brevity × quality
+
+It's turtles all the way down. 🐢
+
 ---
 
 ## 🗄️ Cache Ops: Because Sometimes Wishes Need Revising
@@ -480,7 +490,8 @@ wishful/
 │   ├── 07_typed_outputs.py    # Type registry showcase
 │   ├── 08_dynamic_vs_static.py # Static vs dynamic modes
 │   ├── 09_context_shenanigans.py # Context discovery
-│   └── 12_explore.py          # Multi-variant exploration
+│   ├── 12_explore.py          # Multi-variant exploration
+│   └── 13_explore_advanced.py # LLM-as-judge, self-improving loops
 └── pyproject.toml        # Project config
 ```
 
