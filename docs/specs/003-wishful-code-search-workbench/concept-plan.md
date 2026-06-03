@@ -19,6 +19,9 @@ Current branch reality:
 - The public `evolve()` loop is implemented and exported.
 - `wishful.context` is specified but not implemented.
 - The CLI/dashboard wireframe exists, but evidence/casefile mechanics do not.
+- `wishful.evolve()` currently accepts callables, not import-address strings. String
+  target evolution is part of the future CLI/evidence surface, not the current
+  public Python API.
 
 ## Core Thesis
 
@@ -309,6 +312,11 @@ result = wishful.evolve(
 result.accept()
 ```
 
+This is a future surface sketch. For the current post-merge code, `evolve()`
+takes a callable target. The 002 context MVP should still support string targets
+in the registry so generated or future import-address targets can be described,
+but it should only wire context into callable-based `evolve()` for now.
+
 CLI surface:
 
 ```bash
@@ -476,8 +484,8 @@ Wishful has crossed from joke to serious when:
    `accept()` once evidence exists?
 2. Should `fitness` return only a float, or a richer object with metrics and
    notes?
-3. Should `@wishful.context` allow returning structured data, or only source and
-   docstring for v1?
+3. After v1 source/docstring context, should `@wishful.context` also evaluate
+   providers and capture structured return data?
 4. Should casefiles live under `.wishful/evidence/` or `.wishful/runs/`?
 5. Should demos live in `examples/` or `demos/`?
 6. Which first flagship demo do we build: parser gauntlet or hot path forge?
@@ -488,8 +496,11 @@ When resuming this work:
 
 ```bash
 cd /home/pyro/projects/private/wishful
-git switch feat/001-wishful-evolve
+git switch main
+git pull --ff-only origin main
+git switch -c feat/002-wishful-context
 uv sync
+uv run pytest tests/test_evolve.py -q
 WISHFUL_FAKE_LLM=1 uv run pytest tests/test_evolve.py -v
 ```
 
@@ -500,5 +511,5 @@ Then read:
 3. `docs/specs/002-wishful-context/implementation-plan.md`
 4. this file
 
-Start by finishing the public `evolve()` loop before touching casefiles,
-CLI, demos, or dashboard work.
+Start by implementing `docs/specs/002-wishful-context/implementation-plan.md`
+before touching casefiles, CLI, demos, or dashboard work.

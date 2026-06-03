@@ -17,6 +17,12 @@
 ### Vision
 Enable developers to declaratively attach contextual information (fitness functions, constraints, examples, hints) to wishful-generated functions, making LLM generation smarter and more targeted.
 
+### Current Status
+This spec was refreshed on 2026-06-03 after the public `wishful.evolve()` loop merged.
+`wishful.context` is still unimplemented. The next implementation should target
+the current evolve spine in `src/wishful/evolve/evolver.py` and
+`src/wishful/evolve/mutation.py`.
+
 ### Problem Statement
 When wishful generates or evolves code, the LLM lacks crucial context:
 - **evolve()**: LLM sees fitness *scores* but not *what's being measured*
@@ -25,7 +31,10 @@ When wishful generates or evolves code, the LLM lacks crucial context:
 
 Without this context, the LLM is essentially guessing what "good" means.
 
-**Evidence**: During evolve() Phase 2 implementation, we discovered that `_build_evolution_context()` passes history with scores (90, 55, 25) but never explains WHY those scores differ. The LLM must reverse-engineer the fitness function from code patterns.
+**Evidence**: The merged evolve spine passes prior attempts and fitness scores to
+`_build_evolution_context()`, but it still does not include the fitness function,
+constraints, examples, or acceptance rationale. The LLM must reverse-engineer why
+one variant scored better than another from source patterns alone.
 
 ### Value Proposition
 `@wishful.context` provides a declarative, composable way to give the LLM exactly the context it needs - making generation smarter without changing the core wishful API.
@@ -42,20 +51,20 @@ Without this context, the LLM is essentially guessing what "good" means.
   - [ ] `@wishful.context(for_=target)` decorator registers context
   - [ ] Supports function references: `@wishful.context(for_=sort)`
   - [ ] Supports string paths: `@wishful.context(for_="module.func")`
-  - [ ] Works with functions, classes, and any callable
+  - [ ] Works with functions and classes that have stable module-qualified names
 
 #### Feature 2: Multiple Targets
 - **User Story:** As a developer, I want one context to serve multiple functions so that I don't repeat myself.
 - **Acceptance Criteria:**
   - [ ] `@wishful.context(for_=[sort, search])` registers for both targets
-  - [ ] Order in list determines priority (first = highest)
+  - [ ] Each target keeps context entries in registration order
 
 #### Feature 3: Context Registry
 - **User Story:** As wishful internals, I need to look up all context for a given target.
 - **Acceptance Criteria:**
   - [ ] `get_context_for(target)` returns list of context sources
   - [ ] Returns source code of decorated items
-  - [ ] Respects priority ordering
+  - [ ] Respects registration-order priority
   - [ ] Returns empty list if no context registered
 
 #### Feature 4: Integration Point
@@ -63,6 +72,7 @@ Without this context, the LLM is essentially guessing what "good" means.
 - **Acceptance Criteria:**
   - [ ] Context can be retrieved and formatted for LLM consumption
   - [ ] Works with `_build_evolution_context()` in evolve module
+  - [ ] `evolve()` passes the target function through to mutation so context lookup can use the original callable
   - [ ] Pattern matches existing `@wishful.type` infrastructure
 
 ### Should Have Features
@@ -79,6 +89,8 @@ Without this context, the LLM is essentially guessing what "good" means.
 - **Context validation** - No runtime checking that context is "correct"
 - **Auto-discovery** - No scanning modules for context, must be explicit
 - **Priority override** - No way to re-order after registration
+- **Direct `explore()` or static import integration** - The registry should be reusable, but this phase only wires context into `evolve()`
+- **Callable-instance targets** - Function and class targets are supported first; arbitrary callable objects are out of scope until there is a clear stable-key rule
 
 ---
 
@@ -111,10 +123,10 @@ contexts = wishful.context.get_context_for(sort)
 - Rule 1: Context is registered at decoration time (import time)
 - Rule 2: Multiple contexts for same target are allowed
 - Rule 3: Order of registration = priority order
-- Rule 4: String targets resolved at lookup time, not registration
+- Rule 4: String targets are stored as stable keys; callable lookup normalizes to the same key format
 
 **Edge Cases:**
-- Target doesn't exist yet (string path) → Register anyway, resolve later
+- Target doesn't exist yet (string path) → Register anyway; later callable lookup matches if it normalizes to the same path
 - No context for target → Return empty list (not an error)
 - Same context decorated twice → Register twice (user's choice)
 
@@ -134,13 +146,13 @@ contexts = wishful.context.get_context_for(sort)
 ## Constraints and Assumptions
 
 ### Constraints
-- Must follow existing wishful patterns (`@wishful.type`, `@wishful.static`)
+- Must follow existing wishful patterns (`@wishful.type`, `wishful.evolve`)
 - Must not require changes to existing user code
 - Must work with Python 3.12+
 
 ### Assumptions
 - Global registry is sufficient for initial release
-- Users will provide context as functions or classes (not arbitrary objects)
+- Users will provide context providers as functions or classes (not arbitrary instances)
 - Source code extraction via `inspect.getsource()` or `__wishful_source__` is reliable
 
 ---
@@ -149,5 +161,5 @@ contexts = wishful.context.get_context_for(sort)
 
 - [x] Naming: `for_=` vs `target=` → **Decision: `for_=`** (most natural English)
 - [x] Multiple targets: Yes, via list
-- [x] Priority: Order in list
+- [x] Priority: Registration order for contexts under the same target
 - [x] Scope: Global only for now

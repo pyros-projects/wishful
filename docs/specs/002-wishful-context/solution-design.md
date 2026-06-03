@@ -18,6 +18,13 @@
 
 ## Implementation Context
 
+### Current Status
+
+This design was refreshed on 2026-06-03 after `wishful.evolve()` shipped.
+The implementation should target the live public evolve loop in
+`src/wishful/evolve/evolver.py`, where `evolve()` calls `mutate_with_llm(...)`,
+and the live mutation context builder in `src/wishful/evolve/mutation.py`.
+
 ### Required Context Sources
 
 ```yaml
@@ -32,13 +39,21 @@
 - file: src/wishful/evolve/mutation.py
   relevance: HIGH
   why: "Integration point - _build_evolution_context() will use context registry"
+
+- file: src/wishful/evolve/evolver.py
+  relevance: HIGH
+  why: "Call site that must pass the original target function to mutate_with_llm"
+
+- file: AGENTS.md
+  relevance: MEDIUM
+  why: "Live repo instructions and architecture doc to update; this repo has no CLAUDE.md"
 ```
 
 ### Implementation Boundaries
 
 - **Must Preserve**: Existing `@wishful.type` behavior, `evolve()` API
-- **Can Modify**: `_build_evolution_context()` to include registered context
-- **Must Not Touch**: Core wishful generation logic
+- **Can Modify**: `mutate_with_llm()` and `_build_evolution_context()` to accept optional target context
+- **Must Not Touch**: Import-hook generation behavior, cache behavior, or static/dynamic namespace semantics
 
 ### Project Commands
 
@@ -52,7 +67,7 @@ uv run pytest tests/ -v                          # Full suite
 uv run mypy src/wishful/context/
 
 # Validation
-python -c "from wishful import context; print('OK')"
+uv run python -c "from wishful import context; print('OK')"
 ```
 
 ---
@@ -60,7 +75,7 @@ python -c "from wishful import context; print('OK')"
 ## Solution Strategy
 
 - **Architecture Pattern**: Mirror `@wishful.type` exactly
-- **Integration Approach**: Add optional context lookup to LLM prompt building
+- **Integration Approach**: Add optional context lookup to evolve's mutation prompt builder
 - **Justification**: Proven pattern, predictable for users, minimal new concepts
 
 ---
@@ -87,9 +102,11 @@ src/wishful/
 │   └── registry.py            # NEW: ContextRegistry + decorator
 ├── __init__.py                # MODIFY: Add context exports
 └── evolve/
+    ├── evolver.py             # MODIFY: Pass original target function to mutation
     └── mutation.py            # MODIFY: Integrate context lookup
 tests/
-└── test_context.py            # NEW: Unit tests
+├── test_context.py            # NEW: Unit tests
+└── test_evolve.py             # MODIFY: Context integration tests
 ```
 
 ### Data Models
@@ -136,7 +153,7 @@ def clear_context_registry() -> None:
 ```
 1. Module imports → @wishful.context(for_=sort) executes
 2. Decorator calls _registry.register(provider, for_=sort)
-3. Registry resolves target to key: "mymodule.sort"
+3. Registry normalizes target to key: "mymodule.sort"
 4. Registry extracts source + docstring from provider
 5. Registry stores ContextEntry in _contexts["mymodule.sort"]
 ```
@@ -144,11 +161,12 @@ def clear_context_registry() -> None:
 ### Lookup Flow
 
 ```
-1. evolve() calls _build_evolution_context(target_function=sort)
-2. _build_evolution_context calls get_context_for(sort)
-3. Registry resolves sort → "mymodule.sort"
-4. Registry returns list of ContextEntry dicts
-5. Context included in LLM prompt under "ADDITIONAL CONTEXT"
+1. `evolve()` calls `mutate_with_llm(target_function=sort, ...)`
+2. `mutate_with_llm()` passes `target_function` to `_build_evolution_context()`
+3. `_build_evolution_context()` calls `get_context_for(sort)`
+4. Registry normalizes `sort` → `"mymodule.sort"`
+5. Registry returns list of context-entry dicts
+6. Context is included in the LLM prompt under `ADDITIONAL CONTEXT`
 ```
 
 ### Target Resolution Logic
@@ -156,12 +174,20 @@ def clear_context_registry() -> None:
 ```python
 def _resolve_key(self, target: Any) -> str:
     if isinstance(target, str):
-        return target  # Already a string path
-    elif callable(target):
+        return target  # Already a stable key; no import resolution
+    elif callable(target) and hasattr(target, "__module__") and hasattr(target, "__qualname__"):
         return f"{target.__module__}.{target.__qualname__}"
     else:
-        raise TypeError(f"Target must be callable or string, got {type(target)}")
+        raise TypeError(
+            "Target must be a string path or a function/class with a stable "
+            f"module-qualified name, got {type(target)}"
+        )
 ```
+
+String targets are not imported or resolved during registration. They are stored
+as stable keys so code can register context for generated or not-yet-importable
+targets. Later lookups by callable match when the callable normalizes to the
+same module-qualified key.
 
 ---
 
@@ -182,9 +208,9 @@ def _resolve_key(self, target: Any) -> str:
   - Trade-offs: Can't have module-local contexts
   - User confirmed: ✅ (from earlier discussion)
 
-- [x] **ADR-4**: List targets = register for each with priority order
-  - Rationale: DRY for shared context, priority by position
-  - Trade-offs: Implicit priority might surprise some users
+- [x] **ADR-4**: List targets = register the same provider for each target
+  - Rationale: DRY for shared context without duplicating decorators
+  - Trade-offs: Priority is still per target and follows registration order
   - User confirmed: ✅ (from earlier discussion)
 
 ---
@@ -195,6 +221,23 @@ def _resolve_key(self, target: Any) -> str:
 
 ```python
 # In _build_evolution_context(), add after history section:
+
+def mutate_with_llm(
+    source: str,
+    mutation_prompt: str,
+    function_name: str,
+    history: List[dict],
+    target_function: Callable | None = None,  # NEW parameter
+) -> str:
+    context = _build_evolution_context(
+        source,
+        mutation_prompt,
+        function_name,
+        history,
+        target_function=target_function,
+    )
+    ...
+
 
 def _build_evolution_context(
     source: str,
@@ -225,6 +268,10 @@ def _build_evolution_context(
                     "",
                 ])
 ```
+
+`evolve()` should pass the original function `fn` as `target_function`, not the
+compiled candidate. The developer attached context to the target being evolved,
+and that target stays stable while candidates change.
 
 ---
 
@@ -258,6 +305,7 @@ Scenario: No context registered
 - Registry: register, get_for, clear, key resolution
 - Decorator: with function, with string, with list
 - Source extraction: functions, classes, with/without docstrings
+- Evolve integration: `evolve()` passes the original target function to mutation
 - Integration: context appears in evolve prompt
 
 ---
@@ -269,5 +317,7 @@ Scenario: No context registered
 | `src/wishful/context/__init__.py` | CREATE | Public exports |
 | `src/wishful/context/registry.py` | CREATE | ContextRegistry + decorator |
 | `src/wishful/__init__.py` | MODIFY | Add `context, get_context_for` |
-| `src/wishful/evolve/mutation.py` | MODIFY | Add `target_function` param |
+| `src/wishful/evolve/mutation.py` | MODIFY | Add `target_function` param to `mutate_with_llm()` and `_build_evolution_context()` |
+| `src/wishful/evolve/evolver.py` | MODIFY | Pass the original `fn` into `mutate_with_llm(target_function=fn)` |
 | `tests/test_context.py` | CREATE | Unit tests |
+| `tests/test_evolve.py` | MODIFY | Cover context prompt integration from the public evolve loop |
