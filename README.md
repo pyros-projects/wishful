@@ -8,8 +8,8 @@
   <a href="https://badge.fury.io/py/wishful"><img src="https://badge.fury.io/py/wishful.svg" alt="PyPI version"></a>
   <a href="https://www.python.org/downloads/"><img src="https://img.shields.io/badge/python-3.12+-blue.svg" alt="Python 3.12+"></a>
   <a href="https://opensource.org/licenses/MIT"><img src="https://img.shields.io/badge/License-MIT-yellow.svg" alt="License: MIT"></a>
-  <a href="https://github.com/pyros-projects/wishful"><img src="https://img.shields.io/badge/tests-112%20passed-brightgreen.svg" alt="Tests"></a>
-  <a href="https://github.com/pyros-projects/wishful"><img src="https://img.shields.io/badge/coverage-80%25-green.svg" alt="Coverage"></a>
+  <a href="https://github.com/pyros-projects/wishful"><img src="https://img.shields.io/badge/tests-154%20passed-brightgreen.svg" alt="Tests"></a>
+  <a href="https://github.com/pyros-projects/wishful"><img src="https://img.shields.io/badge/coverage-78%25-green.svg" alt="Coverage"></a>
   <a href="https://github.com/astral-sh/ruff"><img src="https://img.shields.io/badge/code%20style-ruff-000000.svg" alt="Code style: ruff"></a>
 </p>
 
@@ -243,6 +243,77 @@ Want to get _really_ wild? Check out `examples/13_explore_advanced.py` for:
 - **Multi-Objective Optimization**: Speed × brevity × quality
 
 It's turtles all the way down. 🐢
+
+---
+
+## 🧬 Evolve: Improve a Function Over Generations
+
+`explore()` tries several fresh variants. `evolve()` goes one step further: it
+keeps a history of prior attempts, scores, and failures, then passes that
+history back into the next mutation prompt.
+
+```python
+import wishful
+
+
+def normalize_scores(values):
+    values = [float(value) for value in values]
+    if not values:
+        return []
+    minimum = min(values)
+    maximum = max(values)
+    if maximum == minimum:
+        return [0.0 for _ in values]
+    return [(value - minimum) / (maximum - minimum) for value in values]
+
+
+normalize_scores.__wishful_source__ = """
+def normalize_scores(values):
+    values = [float(value) for value in values]
+    if not values:
+        return []
+    minimum = min(values)
+    maximum = max(values)
+    if maximum == minimum:
+        return [0.0 for _ in values]
+    return [(value - minimum) / (maximum - minimum) for value in values]
+""".strip()
+
+
+def is_correct(fn):
+    return (
+        fn([10, 20, 30]) == [0.0, 0.5, 1.0]
+        and fn([2, 2, 2]) == [0.0, 0.0, 0.0]
+    )
+
+
+def score(fn):
+    return 1_000.0 - len(fn.__wishful_source__) if is_correct(fn) else 0.0
+
+
+evolved = wishful.evolve(
+    normalize_scores,
+    fitness=score,
+    test=is_correct,
+    generations=3,
+    variants=4,
+    mutation_prompt="Keep behavior identical but make the code concise.",
+)
+
+print(evolved.__wishful_evolution__)
+```
+
+The returned function carries:
+
+- `__wishful_source__`: the winning source code
+- `__wishful_evolution__`: original score, final score, improvement, generation
+  summaries, and every attempted variant
+
+Try the deterministic offline demo:
+
+```bash
+WISHFUL_FAKE_LLM=1 uv run python examples/14_evolve.py
+```
 
 ---
 

@@ -10,6 +10,7 @@ from wishful.cache import manager as cache
 from wishful.config import configure, reset_defaults, settings
 from wishful.core.discovery import set_context_radius as _set_context_radius
 from wishful.core.finder import install as install_finder
+from wishful.evolve import EvolutionError, evolve
 from wishful.explore import ExplorationError, explore
 from wishful.llm.client import GenerationError
 from wishful.safety.validator import SecurityError
@@ -30,7 +31,9 @@ __all__ = [
     "SecurityError",
     "GenerationError",
     "ExplorationError",
+    "EvolutionError",
     "explore",
+    "evolve",
     "type",
 ]
 
@@ -57,7 +60,7 @@ def inspect_cache() -> List[str]:
 
 def regenerate(module_name: str) -> None:
     """Force regeneration of a module on next import.
-    
+
     Accepts module names with or without the wishful.static prefix.
     Example: regenerate('users') or regenerate('wishful.static.users')
     """
@@ -65,7 +68,7 @@ def regenerate(module_name: str) -> None:
     if not module_name.startswith("wishful"):
         # Default to static namespace for backward compatibility
         module_name = f"wishful.static.{module_name}"
-    
+
     cache.delete_cached(module_name)
     sys.modules.pop(module_name, None)
     importlib.invalidate_caches()
@@ -78,23 +81,23 @@ def set_context_radius(radius: int) -> None:
 
 def reimport(module_path: str):
     """Force a fresh import by clearing the module from cache.
-    
+
     This is especially useful for wishful.dynamic.* imports in loops,
     where you want the LLM to regenerate with fresh context on each iteration.
-    
+
     Args:
         module_path: The full module path (e.g., 'wishful.dynamic.story')
-    
+
     Returns:
         The freshly imported module
-    
+
     Example:
         >>> story = wishful.reimport('wishful.dynamic.story')
         >>> next_line = story.cosmic_horror_next_sentence(current_text)
     """
     # Clear from Python's module cache
     sys.modules.pop(module_path, None)
-    
+
     # Import fresh (this triggers wishful's import hook if it's a wishful.* module)
     return importlib.import_module(module_path)
 
