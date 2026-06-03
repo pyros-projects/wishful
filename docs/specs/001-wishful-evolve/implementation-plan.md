@@ -49,18 +49,10 @@ If implementation cannot follow specification exactly:
 
 **Design Documentation**:
 
-- `.internal/wishful-research/pyglove/02-evolve-design.md` - Full design specification
-  - AlphaEvolve research foundation (lines 7-40)
-  - API specification with all parameters (lines 92-139)
-  - History-as-context mechanism (lines 143-228)
-  - Usage examples (lines 281-415)
-  - Error handling (lines 509-525)
-
-- `.internal/wishful-research/pyglove/02-evolve-implementation.md` - TDD implementation guide
-  - File structure (lines 17-33)
-  - Complete test suite (lines 37-585)
-  - Implementation code for all modules (lines 589-1121)
-  - Example file (lines 1185-1254)
+- `docs/specs/001-wishful-evolve/implementation-plan.md` - this implementation plan
+- `docs/specs/002-wishful-context/product-requirements.md` - planned context layer
+- `docs/specs/002-wishful-context/solution-design.md` - context integration point for evolve prompts
+- `docs/specs/003-wishful-code-search-workbench/concept-plan.md` - product direction for function lineage and evidence casefiles
 
 **Key Design Decisions**:
 
@@ -79,7 +71,7 @@ If implementation cannot follow specification exactly:
 - **Test command**: `uv run pytest tests/test_evolve.py -v`
 - **Full test suite**: `uv run pytest tests/ -v`
 - **Type checking**: `uv run mypy src/wishful/evolve/`
-- **Example**: `uv run python examples/13_evolve.py`
+- **Example**: `uv run python examples/14_evolve.py`
 - **Fake LLM mode**: `WISHFUL_FAKE_LLM=1 uv run pytest tests/test_evolve.py -v`
 
 **Patterns to Follow**:
@@ -96,19 +88,19 @@ If implementation cannot follow specification exactly:
 - [x] T1 Phase 1: Foundation Layer `[component: evolve-foundation]`
 
     - [x] T1.1 Prime Context
-        - [x] T1.1.1 Read design for EvolutionError requirements `[ref: 02-evolve-implementation.md; lines: 591-617]`
-        - [x] T1.1.2 Read design for EvolutionHistory requirements `[ref: 02-evolve-implementation.md; lines: 623-731]`
+        - [x] T1.1.1 Read design for EvolutionError requirements
+        - [x] T1.1.2 Read design for EvolutionHistory requirements
         - [x] T1.1.3 Review existing explore exceptions pattern `[ref: src/wishful/explore/exceptions.py]`
 
     - [x] T1.2 Write Tests `[activity: test-execution]`
-        - [x] T1.2.1 Create `tests/test_evolve.py` with `TestEvolutionError` class `[ref: 02-evolve-implementation.md; lines: 508-531]`
-        - [x] T1.2.2 Add `TestEvolveMetadata` tests `[ref: 02-evolve-implementation.md; lines: 375-418]`
-        - [x] T1.2.3 Add `TestEvolveHistory` tests `[ref: 02-evolve-implementation.md; lines: 421-448]`
+        - [x] T1.2.1 Create `tests/test_evolve.py` with `TestEvolutionError` class
+        - [x] T1.2.2 Add `TestEvolveMetadata` tests
+        - [x] T1.2.3 Add `TestEvolveHistory` tests
 
     - [x] T1.3 Implement `[activity: domain-modeling]`
-        - [x] T1.3.1 Create `src/wishful/evolve/exceptions.py` with EvolutionError `[ref: 02-evolve-implementation.md; lines: 593-617]`
-        - [x] T1.3.2 Create `src/wishful/evolve/history.py` with VariantRecord, GenerationRecord, EvolutionHistory `[ref: 02-evolve-implementation.md; lines: 625-731]`
-        - [x] T1.3.3 Implement `get_context_for_llm(limit)` method - THE KEY ALPHAEVOLVE MECHANISM `[ref: 02-evolve-implementation.md; lines: 671-697]`
+        - [x] T1.3.1 Create `src/wishful/evolve/exceptions.py` with EvolutionError
+        - [x] T1.3.2 Create `src/wishful/evolve/history.py` with VariantRecord, GenerationRecord, EvolutionHistory
+        - [x] T1.3.3 Implement `get_context_for_llm(limit)` method - THE KEY ALPHAEVOLVE MECHANISM
 
     - [x] T1.4 Validate `[activity: run-tests]`
         - [x] T1.4.1 Run `uv run pytest tests/test_evolve.py::TestEvolutionError -v`
@@ -122,8 +114,8 @@ If implementation cannot follow specification exactly:
 - [x] T2 Phase 2: LLM Mutation with History Context `[component: evolve-mutation]`
 
     - [x] T2.1 Prime Context
-        - [x] T2.1.1 Read mutation module design `[ref: 02-evolve-implementation.md; lines: 737-889]`
-        - [x] T2.1.2 Study `_build_evolution_context()` function - formats history for LLM `[ref: 02-evolve-implementation.md; lines: 784-862]`
+        - [x] T2.1.1 Read mutation module design
+        - [x] T2.1.2 Study `_build_evolution_context()` function - formats history for LLM
         - [x] T2.1.3 Review existing LLM client usage `[ref: src/wishful/llm/client.py]`
 
     - [x] T2.2 Write Tests `[activity: test-execution]`
@@ -133,11 +125,11 @@ If implementation cannot follow specification exactly:
         - [x] T2.2.4 Add `TestMutateWithLLM` tests (3 tests)
 
     - [x] T2.3 Implement `[activity: component-development]`
-        - [x] T2.3.1 Create `src/wishful/evolve/mutation.py` `[ref: 02-evolve-implementation.md; lines: 741-889]`
-        - [x] T2.3.2 Implement `mutate_with_llm(source, mutation_prompt, function_name, history)` `[ref: 02-evolve-implementation.md; lines: 751-781]`
-        - [x] T2.3.3 Implement `_build_evolution_context()` with rich history formatting `[ref: 02-evolve-implementation.md; lines: 784-862]`
+        - [x] T2.3.1 Create `src/wishful/evolve/mutation.py`
+        - [x] T2.3.2 Implement `mutate_with_llm(source, mutation_prompt, function_name, history)`
+        - [x] T2.3.3 Implement `_build_evolution_context()` with rich history formatting
         - [x] T2.3.4 Implement `_truncate_source()` utility
-        - [x] T2.3.5 Implement `get_function_source()` utility `[ref: 02-evolve-implementation.md; lines: 873-889]`
+        - [x] T2.3.5 Implement `get_function_source()` utility
 
     - [x] T2.4 Validate `[activity: run-tests]`
         - [x] T2.4.1 Run `uv run pytest tests/test_evolve.py -v` - 33 tests passing
@@ -148,86 +140,86 @@ If implementation cannot follow specification exactly:
 
 ### Phase 3: Core Evolver - The Evolution Loop
 
-- [ ] T3 Phase 3: Main evolve() Function `[component: evolve-core]`
+- [x] T3 Phase 3: Main evolve() Function `[component: evolve-core]`
 
-    - [ ] T3.1 Prime Context
-        - [ ] T3.1.1 Read evolver design `[ref: 02-evolve-implementation.md; lines: 895-1121]`
-        - [ ] T3.1.2 Study evolution loop with history context passing `[ref: 02-evolve-implementation.md; lines: 984-1081]`
-        - [ ] T3.1.3 Review explore() implementation pattern `[ref: src/wishful/explore/explorer.py]`
+    - [x] T3.1 Prime Context
+        - [x] T3.1.1 Read live evolve and workbench specs
+        - [x] T3.1.2 Study evolution loop with history context passing
+        - [x] T3.1.3 Review explore() implementation pattern `[ref: src/wishful/explore/explorer.py]`
 
-    - [ ] T3.2 Write Tests `[activity: test-execution]`
-        - [ ] T3.2.1 Add `TestEvolveBasic` tests `[ref: 02-evolve-implementation.md; lines: 52-127]`
-        - [ ] T3.2.2 Add `TestEvolveWithTest` tests `[ref: 02-evolve-implementation.md; lines: 264-344]`
-        - [ ] T3.2.3 Add `TestEvolveVerbose` tests `[ref: 02-evolve-implementation.md; lines: 534-558]`
+    - [x] T3.2 Write Tests `[activity: test-execution]`
+        - [x] T3.2.1 Add `TestEvolveBasic` tests
+        - [x] T3.2.2 Add `TestEvolveWithTest` tests
+        - [x] T3.2.3 Add public import integration tests
 
-    - [ ] T3.3 Implement `[activity: component-development]`
-        - [ ] T3.3.1 Create `src/wishful/evolve/evolver.py` `[ref: 02-evolve-implementation.md; lines: 897-1121]`
-        - [ ] T3.3.2 Implement `evolve()` with full parameter set including `keep_history` and `history_limit` `[ref: 02-evolve-implementation.md; lines: 909-950]`
-        - [ ] T3.3.3 Implement evolution loop with history context passing to mutation `[ref: 02-evolve-implementation.md; lines: 984-1081]`
-        - [ ] T3.3.4 Implement `_compile_function()` helper `[ref: 02-evolve-implementation.md; lines: 1109-1120]`
+    - [x] T3.3 Implement `[activity: component-development]`
+        - [x] T3.3.1 Create `src/wishful/evolve/evolver.py`
+        - [x] T3.3.2 Implement `evolve()` with `keep_history` and `history_limit`
+        - [x] T3.3.3 Implement evolution loop with history context passing to mutation
+        - [x] T3.3.4 Implement `_compile_function()` helper
 
-    - [ ] T3.4 Validate `[activity: run-tests]`
-        - [ ] T3.4.1 Run `uv run pytest tests/test_evolve.py::TestEvolveBasic -v`
-        - [ ] T3.4.2 Run `uv run pytest tests/test_evolve.py::TestEvolveWithTest -v`
-        - [ ] T3.4.3 Run `uv run pytest tests/test_evolve.py::TestEvolveVerbose -v`
+    - [x] T3.4 Validate `[activity: run-tests]`
+        - [x] T3.4.1 Run `uv run pytest tests/test_evolve.py::TestEvolveBasic -q`
+        - [x] T3.4.2 Run `uv run pytest tests/test_evolve.py::TestEvolveWithTest -q`
+        - [x] T3.4.3 Run `uv run pytest tests/test_evolve.py -q`
 
 ---
 
 ### Phase 4: Public API and Integration
 
-- [ ] T4 Phase 4: Public API Integration `[component: evolve-api]`
+- [x] T4 Phase 4: Public API Integration `[component: evolve-api]`
 
-    - [ ] T4.1 Prime Context
-        - [ ] T4.1.1 Read public API design `[ref: 02-evolve-implementation.md; lines: 1127-1150]`
-        - [ ] T4.1.2 Read integration requirements `[ref: 02-evolve-implementation.md; lines: 1154-1168]`
-        - [ ] T4.1.3 Review existing wishful `__init__.py` exports `[ref: src/wishful/__init__.py]`
+    - [x] T4.1 Prime Context
+        - [x] T4.1.1 Read public API requirements from this plan
+        - [x] T4.1.2 Read integration requirements from this plan
+        - [x] T4.1.3 Review existing wishful `__init__.py` exports `[ref: src/wishful/__init__.py]`
 
-    - [ ] T4.2 Write Tests `[activity: test-execution]`
-        - [ ] T4.2.1 Add `TestEvolveIntegration` tests `[ref: 02-evolve-implementation.md; lines: 561-584]`
-        - [ ] T4.2.2 Add import tests for public API
+    - [x] T4.2 Write Tests `[activity: test-execution]`
+        - [x] T4.2.1 Add `TestEvolveIntegration` tests
+        - [x] T4.2.2 Add import tests for public API
 
-    - [ ] T4.3 Implement `[activity: component-development]`
-        - [ ] T4.3.1 Create `src/wishful/evolve/__init__.py` with exports `[ref: 02-evolve-implementation.md; lines: 1129-1150]`
-        - [ ] T4.3.2 Update `src/wishful/__init__.py` to export `evolve` and `EvolutionError` `[ref: 02-evolve-implementation.md; lines: 1158-1168]`
+    - [x] T4.3 Implement `[activity: component-development]`
+        - [x] T4.3.1 Create `src/wishful/evolve/__init__.py` with exports
+        - [x] T4.3.2 Update `src/wishful/__init__.py` to export `evolve` and `EvolutionError`
 
-    - [ ] T4.4 Validate `[activity: run-tests]`
-        - [ ] T4.4.1 Run `uv run pytest tests/test_evolve.py::TestEvolveIntegration -v`
-        - [ ] T4.4.2 Test import: `python -c "from wishful import evolve, EvolutionError; print('OK')"`
+    - [x] T4.4 Validate `[activity: run-tests]`
+        - [x] T4.4.1 Run `uv run pytest tests/test_evolve.py::TestEvolveIntegration -q`
+        - [x] T4.4.2 Test import: `from wishful import evolve, EvolutionError`
 
 ---
 
 ### Phase 5: Example and Documentation
 
-- [ ] T5 Phase 5: Example and Final Polish `[component: evolve-docs]`
+- [x] T5 Phase 5: Example and Final Polish `[component: evolve-docs]`
 
-    - [ ] T5.1 Prime Context
-        - [ ] T5.1.1 Read example file design `[ref: 02-evolve-implementation.md; lines: 1185-1254]`
-        - [ ] T5.1.2 Review existing examples pattern `[ref: examples/]`
+    - [x] T5.1 Prime Context
+        - [x] T5.1.1 Read existing example patterns
+        - [x] T5.1.2 Review existing examples pattern `[ref: examples/]`
 
-    - [ ] T5.2 Create Example `[activity: component-development]`
-        - [ ] T5.2.1 Create `examples/13_evolve.py` `[ref: 02-evolve-implementation.md; lines: 1189-1254]`
-        - [ ] T5.2.2 Test example with fake LLM: `WISHFUL_FAKE_LLM=1 uv run python examples/13_evolve.py`
+    - [x] T5.2 Create Example `[activity: component-development]`
+        - [x] T5.2.1 Create `examples/14_evolve.py`
+        - [x] T5.2.2 Test example with fake LLM: `WISHFUL_FAKE_LLM=1 uv run python examples/14_evolve.py`
 
-    - [ ] T5.3 Validate `[activity: run-tests]`
-        - [ ] T5.3.1 Run full test suite: `uv run pytest tests/test_evolve.py -v`
-        - [ ] T5.3.2 Check coverage: `uv run pytest tests/test_evolve.py --cov=src/wishful/evolve --cov-report=term-missing`
-        - [ ] T5.3.3 Type check: `uv run mypy src/wishful/evolve/`
+    - [x] T5.3 Validate `[activity: run-tests]`
+        - [x] T5.3.1 Run full test suite: `uv run pytest tests/test_evolve.py -q`
+        - [x] T5.3.2 Check coverage: `uv run pytest tests/test_evolve.py --cov=src/wishful/evolve --cov-report=term-missing`
+        - [x] T5.3.3 Type check: `uv run mypy src/wishful/evolve/`
 
 ---
 
 ### Phase 6: Integration & End-to-End Validation
 
-- [ ] T6 Final Validation
+- [x] T6 Final Validation
 
-    - [ ] T6.1 All unit tests passing: `uv run pytest tests/test_evolve.py -v`
-    - [ ] T6.2 Integration with existing wishful features verified
-    - [ ] T6.3 Example runs successfully with fake LLM
-    - [ ] T6.4 Test coverage ≥90% for new code
-    - [ ] T6.5 Type hints complete, mypy passes
-    - [ ] T6.6 Docstrings complete for all public APIs
-    - [ ] T6.7 Full test suite still passes: `uv run pytest tests/ -v`
-    - [ ] T6.8 `from wishful import evolve, EvolutionError` works
-    - [ ] T6.9 Definition of Done checklist from design doc verified `[ref: 02-evolve-implementation.md; lines: 1172-1183]`
+    - [x] T6.1 All unit tests passing: `uv run pytest tests/test_evolve.py -q`
+    - [x] T6.2 Integration with existing wishful features verified
+    - [x] T6.3 Example runs successfully with fake LLM
+    - [x] T6.4 Test coverage ≥90% for new code
+    - [x] T6.5 Type hints complete, mypy passes
+    - [x] T6.6 Docstrings complete for all public APIs
+    - [x] T6.7 Full test suite still passes: `uv run pytest --cov=wishful tests/`
+    - [x] T6.8 `from wishful import evolve, EvolutionError` works
+    - [x] T6.9 Definition of Done checklist verified against this plan
 
 ---
 
@@ -235,14 +227,14 @@ If implementation cannot follow specification exactly:
 
 From the design specification:
 
-- [ ] All tests in `test_evolve.py` pass (25+ tests)
-- [ ] Coverage for new code is ≥90%
-- [ ] `wishful.evolve` is importable from main package
-- [ ] History context is properly passed to LLM (the AlphaEvolve innovation)
-- [ ] Works with `WISHFUL_FAKE_LLM=1`
-- [ ] Documentation strings are complete
-- [ ] Example file demonstrates basic usage
-- [ ] Type hints complete, `mypy` passes
+- [x] All tests in `test_evolve.py` pass (25+ tests)
+- [x] Coverage for new code is ≥90%
+- [x] `wishful.evolve` is importable from main package
+- [x] History context is properly passed to LLM (the AlphaEvolve innovation)
+- [x] Works with `WISHFUL_FAKE_LLM=1`
+- [x] Documentation strings are complete
+- [x] Example file demonstrates basic usage
+- [x] Type hints complete, `mypy` passes
 
 ---
 
@@ -263,5 +255,5 @@ From the design specification:
 - [AlphaEvolve Blog Post](https://deepmind.google/blog/alphaevolve-a-gemini-powered-coding-agent-for-designing-advanced-algorithms/) — Google DeepMind
 - [AlphaEvolve Paper](https://arxiv.org/abs/2506.13131) — arXiv
 - [OpenEvolve](https://huggingface.co/blog/codelion/openevolve) — Open source implementation
-- Design Doc: `.internal/wishful-research/pyglove/02-evolve-design.md`
-- Implementation Guide: `.internal/wishful-research/pyglove/02-evolve-implementation.md`
+- Current design direction: `docs/specs/003-wishful-code-search-workbench/concept-plan.md`
+- Context follow-up: `docs/specs/002-wishful-context/implementation-plan.md`

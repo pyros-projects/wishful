@@ -133,17 +133,17 @@ uv run mypy src/wishful/context/          # Type check
         - [ ] T4.1.2 Update Phase 3 (Core Evolver) to pass `target_function` to mutation
 
     - [ ] T4.2 Update Evolve Design Docs
-        - [ ] T4.2.1 Add context integration section to `.internal/wishful-research/pyglove/02-evolve-design.md`
-        - [ ] T4.2.2 Add context integration section to `.internal/wishful-research/pyglove/02-evolve-implementation.md`
+        - [ ] T4.2.1 Add context integration section to `docs/specs/001-wishful-evolve/implementation-plan.md`
+        - [ ] T4.2.2 Add context follow-up notes to `docs/specs/003-wishful-code-search-workbench/concept-plan.md`
 
     - [ ] T4.3 Update CLAUDE.md
         - [ ] T4.3.1 Add `wishful.context` to architecture section
         - [ ] T4.3.2 Update session history
 
     - [ ] T4.4 Create Tryout Scripts
-        - [ ] T4.4.1 Create `.internal/tryout/002-wishful-context/01_basic_usage.py`
-        - [ ] T4.4.2 Create `.internal/tryout/002-wishful-context/02_with_evolve.py`
-        - [ ] T4.4.3 Create `.internal/tryout/002-wishful-context/README.md`
+        - [ ] T4.4.1 Create `examples/15_context_basic.py`
+        - [ ] T4.4.2 Create `examples/16_context_with_evolve.py`
+        - [ ] T4.4.3 Document context examples in `README.md`
 
 ---
 

@@ -4,17 +4,14 @@ This module contains the core AlphaEvolve-inspired component: mutation functions
 that receive and use evolutionary history to make informed code improvements.
 """
 
-from typing import Callable, List, Optional
+from typing import Callable, List
 import inspect
 
 from wishful.llm.client import generate_module_code
 
 
 def mutate_with_llm(
-    source: str,
-    mutation_prompt: str,
-    function_name: str,
-    history: List[dict]
+    source: str, mutation_prompt: str, function_name: str, history: List[dict]
 ) -> str:
     """
     Ask the LLM to create a mutation informed by evolutionary history.
@@ -37,17 +34,12 @@ def mutate_with_llm(
 
     # Use existing LLM infrastructure
     return generate_module_code(
-        module="wishful.evolve._mutation",
-        functions=[function_name],
-        context=context
+        module="wishful.evolve._mutation", functions=[function_name], context=context
     )
 
 
 def _build_evolution_context(
-    source: str,
-    mutation_prompt: str,
-    function_name: str,
-    history: List[dict]
+    source: str, mutation_prompt: str, function_name: str, history: List[dict]
 ) -> str:
     """
     Build rich context string for LLM mutation.
@@ -74,14 +66,16 @@ def _build_evolution_context(
 
     # Add history context (the AlphaEvolve secret sauce)
     if history:
-        parts.extend([
-            "-" * 60,
-            "EVOLUTION HISTORY (sorted by fitness, best first):",
-            "-" * 60,
-            "",
-            "Learn from these previous attempts. Higher fitness = better.",
-            ""
-        ])
+        parts.extend(
+            [
+                "-" * 60,
+                "EVOLUTION HISTORY (sorted by fitness, best first):",
+                "-" * 60,
+                "",
+                "Learn from these previous attempts. Higher fitness = better.",
+                "",
+            ]
+        )
 
         for i, entry in enumerate(history):
             fitness = entry.get("fitness")
@@ -97,32 +91,24 @@ def _build_evolution_context(
 
             # Include truncated source for context
             source_preview = _truncate_source(variant_source, max_lines=10)
-            parts.extend([
-                "```python",
-                source_preview,
-                "```",
-                ""
-            ])
+            parts.extend(["```python", source_preview, "```", ""])
 
     # Add user guidance (only if provided)
     if mutation_prompt:
-        parts.extend([
-            "-" * 60,
-            f"USER GUIDANCE: {mutation_prompt}",
-            "-" * 60,
-            ""
-        ])
+        parts.extend(["-" * 60, f"USER GUIDANCE: {mutation_prompt}", "-" * 60, ""])
 
     # Instructions for the LLM
-    parts.extend([
-        "YOUR TASK:",
-        "1. Analyze what made high-scoring attempts successful",
-        "2. Understand why low-scoring attempts performed poorly",
-        "3. Create an IMPROVED version that should score higher",
-        "4. Keep the same function name and signature",
-        "5. Return ONLY the Python code, no explanations",
-        "",
-    ])
+    parts.extend(
+        [
+            "YOUR TASK:",
+            "1. Analyze what made high-scoring attempts successful",
+            "2. Understand why low-scoring attempts performed poorly",
+            "3. Create an IMPROVED version that should score higher",
+            "4. Keep the same function name and signature",
+            "5. Return ONLY the Python code, no explanations",
+            "",
+        ]
+    )
 
     return "\n".join(parts)
 
@@ -138,7 +124,10 @@ def _truncate_source(source: str, max_lines: int = 10) -> str:
     lines = source.strip().split("\n")
     if len(lines) <= max_lines:
         return source
-    return "\n".join(lines[:max_lines]) + f"\n    # ... ({len(lines) - max_lines} more lines)"
+    return (
+        "\n".join(lines[:max_lines])
+        + f"\n    # ... ({len(lines) - max_lines} more lines)"
+    )
 
 
 def get_function_source(fn: Callable) -> str:

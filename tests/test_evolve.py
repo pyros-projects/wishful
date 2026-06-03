@@ -1,5 +1,7 @@
 """Tests for wishful.evolve functionality."""
 
+import importlib
+
 import pytest
 
 from wishful.evolve.exceptions import EvolutionError
@@ -16,6 +18,7 @@ class TestEvolutionErrorUnit:
 
     def test_evolution_error_attributes(self):
         """EvolutionError should store all attributes."""
+
         def dummy():
             pass
 
@@ -25,7 +28,7 @@ class TestEvolutionErrorUnit:
             best_fitness=42.5,
             original_fitness=10.0,
             generations_completed=5,
-            total_attempts=25
+            total_attempts=25,
         )
 
         assert err.best_variant == dummy
@@ -50,10 +53,7 @@ class TestVariantRecord:
     def test_variant_record_creation(self):
         """VariantRecord should store variant data."""
         record = VariantRecord(
-            source="def fn(): pass",
-            fitness=42.0,
-            failed=False,
-            error_message=None
+            source="def fn(): pass", fitness=42.0, failed=False, error_message=None
         )
         assert record.source == "def fn(): pass"
         assert record.fitness == 42.0
@@ -66,7 +66,7 @@ class TestVariantRecord:
             source="def fn(): syntax error",
             fitness=None,
             failed=True,
-            error_message="SyntaxError"
+            error_message="SyntaxError",
         )
         assert record.failed is True
         assert record.error_message == "SyntaxError"
@@ -81,7 +81,7 @@ class TestGenerationRecord:
             generation=1,
             best_fitness=55.0,
             variants_tried=5,
-            best_source="def fn(): return 1"
+            best_source="def fn(): return 1",
         )
         assert record.generation == 1
         assert record.best_fitness == 55.0
@@ -98,7 +98,7 @@ class TestEvolutionHistory:
             original_fitness=10.0,
             final_fitness=50.0,
             generations=5,
-            total_variants_tried=25
+            total_variants_tried=25,
         )
         assert history.original_fitness == 10.0
         assert history.final_fitness == 50.0
@@ -113,7 +113,7 @@ class TestEvolutionHistory:
             original_fitness=10.0,
             final_fitness=15.0,
             generations=1,
-            total_variants_tried=1
+            total_variants_tried=1,
         )
         assert history.improvement == "+50.0%"
 
@@ -123,7 +123,7 @@ class TestEvolutionHistory:
             original_fitness=10.0,
             final_fitness=5.0,
             generations=1,
-            total_variants_tried=1
+            total_variants_tried=1,
         )
         assert history.improvement == "-50.0%"
 
@@ -133,7 +133,7 @@ class TestEvolutionHistory:
             original_fitness=0.0,
             final_fitness=10.0,
             generations=1,
-            total_variants_tried=1
+            total_variants_tried=1,
         )
         assert history.improvement == "N/A"
 
@@ -143,7 +143,7 @@ class TestEvolutionHistory:
             original_fitness=10.0,
             final_fitness=10.0,
             generations=0,
-            total_variants_tried=0
+            total_variants_tried=0,
         )
 
         history.add_variant("def fn(): return 1", fitness=20.0)
@@ -159,13 +159,11 @@ class TestEvolutionHistory:
             original_fitness=10.0,
             final_fitness=10.0,
             generations=0,
-            total_variants_tried=0
+            total_variants_tried=0,
         )
 
         history.add_variant(
-            "def fn(): syntax error",
-            failed=True,
-            error_message="SyntaxError"
+            "def fn(): syntax error", failed=True, error_message="SyntaxError"
         )
 
         assert history.all_variants[0].failed is True
@@ -177,7 +175,7 @@ class TestEvolutionHistory:
             original_fitness=10.0,
             final_fitness=10.0,
             generations=0,
-            total_variants_tried=0
+            total_variants_tried=0,
         )
 
         history.add_variant("def fn(): return 1", fitness=10.0)
@@ -197,7 +195,7 @@ class TestEvolutionHistory:
             original_fitness=10.0,
             final_fitness=10.0,
             generations=0,
-            total_variants_tried=0
+            total_variants_tried=0,
         )
 
         for i in range(10):
@@ -217,11 +215,13 @@ class TestEvolutionHistory:
             original_fitness=10.0,
             final_fitness=10.0,
             generations=0,
-            total_variants_tried=0
+            total_variants_tried=0,
         )
 
         history.add_variant("def fn(): return 1", fitness=50.0)
-        history.add_variant("def fn(): syntax", failed=True, error_message="SyntaxError")
+        history.add_variant(
+            "def fn(): syntax", failed=True, error_message="SyntaxError"
+        )
 
         context = history.get_context_for_llm()
 
@@ -235,7 +235,7 @@ class TestEvolutionHistory:
             original_fitness=10.0,
             final_fitness=10.0,
             generations=0,
-            total_variants_tried=0
+            total_variants_tried=0,
         )
 
         history.add_variant("def fn(): fail", fitness=None, failed=True)
@@ -253,18 +253,14 @@ class TestEvolutionHistory:
             original_fitness=10.0,
             final_fitness=50.0,
             generations=2,
-            total_variants_tried=10
+            total_variants_tried=10,
         )
-        history.history.append(GenerationRecord(
-            generation=1,
-            best_fitness=30.0,
-            variants_tried=5
-        ))
-        history.history.append(GenerationRecord(
-            generation=2,
-            best_fitness=50.0,
-            variants_tried=5
-        ))
+        history.history.append(
+            GenerationRecord(generation=1, best_fitness=30.0, variants_tried=5)
+        )
+        history.history.append(
+            GenerationRecord(generation=2, best_fitness=50.0, variants_tried=5)
+        )
 
         d = history.to_dict()
 
@@ -282,6 +278,7 @@ class TestEvolutionHistory:
 # Phase 2: Mutation Module Tests
 # =============================================================================
 
+
 class TestBuildEvolutionContext:
     """Tests for _build_evolution_context() - the AlphaEvolve context builder."""
 
@@ -293,7 +290,7 @@ class TestBuildEvolutionContext:
             source="def fn(x):\n    return x * 2",
             mutation_prompt="",
             function_name="fn",
-            history=[]
+            history=[],
         )
 
         assert "def fn(x):" in context
@@ -308,7 +305,7 @@ class TestBuildEvolutionContext:
             source="def fn(x): return x",
             mutation_prompt="make it faster using numpy",
             function_name="fn",
-            history=[]
+            history=[],
         )
 
         assert "make it faster using numpy" in context
@@ -322,7 +319,7 @@ class TestBuildEvolutionContext:
             source="def fn(x): return x",
             mutation_prompt="",
             function_name="fn",
-            history=[]
+            history=[],
         )
 
         assert "USER GUIDANCE" not in context
@@ -332,15 +329,25 @@ class TestBuildEvolutionContext:
         from wishful.evolve.mutation import _build_evolution_context
 
         history = [
-            {"source": "def fn(x): return x + 1", "fitness": 50.0, "failed": False, "error": None},
-            {"source": "def fn(x): return x * 2", "fitness": 30.0, "failed": False, "error": None},
+            {
+                "source": "def fn(x): return x + 1",
+                "fitness": 50.0,
+                "failed": False,
+                "error": None,
+            },
+            {
+                "source": "def fn(x): return x * 2",
+                "fitness": 30.0,
+                "failed": False,
+                "error": None,
+            },
         ]
 
         context = _build_evolution_context(
             source="def fn(x): return x + 1",
             mutation_prompt="",
             function_name="fn",
-            history=history
+            history=history,
         )
 
         assert "EVOLUTION HISTORY" in context
@@ -353,15 +360,25 @@ class TestBuildEvolutionContext:
         from wishful.evolve.mutation import _build_evolution_context
 
         history = [
-            {"source": "def fn(x): return x", "fitness": 50.0, "failed": False, "error": None},
-            {"source": "def fn(x): syntax error", "fitness": None, "failed": True, "error": "SyntaxError"},
+            {
+                "source": "def fn(x): return x",
+                "fitness": 50.0,
+                "failed": False,
+                "error": None,
+            },
+            {
+                "source": "def fn(x): syntax error",
+                "fitness": None,
+                "failed": True,
+                "error": "SyntaxError",
+            },
         ]
 
         context = _build_evolution_context(
             source="def fn(x): return x",
             mutation_prompt="",
             function_name="fn",
-            history=history
+            history=history,
         )
 
         assert "FAILED" in context
@@ -375,7 +392,7 @@ class TestBuildEvolutionContext:
             source="def fn(x): return x",
             mutation_prompt="",
             function_name="fn",
-            history=[]
+            history=[],
         )
 
         assert "YOUR TASK" in context
@@ -389,7 +406,7 @@ class TestBuildEvolutionContext:
             source="def fn(x): return x",
             mutation_prompt="",
             function_name="fn",
-            history=[]
+            history=[],
         )
 
         # Should not include history section when empty
@@ -446,6 +463,7 @@ class TestGetFunctionSource:
 
         def dummy():
             pass
+
         dummy.__wishful_source__ = "def dummy():\n    return 42"
 
         result = get_function_source(dummy)
@@ -485,7 +503,8 @@ class TestMutateWithLLM:
             called_with["functions"] = functions
             return "def fn(x):\n    return x + 1"
 
-        monkeypatch.setattr("wishful.evolve.mutation.generate_module_code", fake_generate)
+        mutation_module = importlib.import_module("wishful.evolve.mutation")
+        monkeypatch.setattr(mutation_module, "generate_module_code", fake_generate)
 
         from wishful.evolve.mutation import mutate_with_llm
 
@@ -493,7 +512,7 @@ class TestMutateWithLLM:
             source="def fn(x):\n    return x",
             mutation_prompt="improve it",
             function_name="fn",
-            history=[]
+            history=[],
         )
 
         assert called_with["functions"] == ["fn"]
@@ -509,19 +528,25 @@ class TestMutateWithLLM:
             called_with["context"] = context
             return "def fn(x):\n    return x + 1"
 
-        monkeypatch.setattr("wishful.evolve.mutation.generate_module_code", fake_generate)
+        mutation_module = importlib.import_module("wishful.evolve.mutation")
+        monkeypatch.setattr(mutation_module, "generate_module_code", fake_generate)
 
         from wishful.evolve.mutation import mutate_with_llm
 
         history = [
-            {"source": "def fn(x): return x * 2", "fitness": 50.0, "failed": False, "error": None},
+            {
+                "source": "def fn(x): return x * 2",
+                "fitness": 50.0,
+                "failed": False,
+                "error": None,
+            },
         ]
 
         mutate_with_llm(
             source="def fn(x):\n    return x",
             mutation_prompt="",
             function_name="fn",
-            history=history
+            history=history,
         )
 
         assert "Fitness = 50.00" in called_with["context"]
@@ -529,10 +554,12 @@ class TestMutateWithLLM:
 
     def test_mutate_returns_generated_code(self, monkeypatch):
         """mutate_with_llm should return the LLM-generated code."""
+
         def fake_generate(module, functions, context, **kwargs):
             return "def fn(x):\n    return x * 100"
 
-        monkeypatch.setattr("wishful.evolve.mutation.generate_module_code", fake_generate)
+        mutation_module = importlib.import_module("wishful.evolve.mutation")
+        monkeypatch.setattr(mutation_module, "generate_module_code", fake_generate)
 
         from wishful.evolve.mutation import mutate_with_llm
 
@@ -540,7 +567,285 @@ class TestMutateWithLLM:
             source="def fn(x):\n    return x",
             mutation_prompt="",
             function_name="fn",
-            history=[]
+            history=[],
         )
 
         assert result == "def fn(x):\n    return x * 100"
+
+
+# =============================================================================
+# Phase 3: Public evolve() Loop Tests
+# =============================================================================
+
+
+class TestEvolveBasic:
+    """Tests for the public evolve() loop."""
+
+    def test_evolve_returns_better_variant(self, monkeypatch):
+        """evolve should return the highest-fitness generated variant."""
+        from wishful.evolve import evolve
+
+        def score(fn):
+            return float(fn(10))
+
+        def transform(x):
+            return x
+
+        transform.__wishful_source__ = "def transform(x):\n    return x"
+
+        variants = iter(
+            [
+                "def transform(x):\n    return x + 5",
+                "def transform(x):\n    return x + 20",
+            ]
+        )
+
+        evolver_module = importlib.import_module("wishful.evolve.evolver")
+        monkeypatch.setattr(
+            evolver_module, "mutate_with_llm", lambda **kwargs: next(variants)
+        )
+
+        evolved = evolve(
+            transform,
+            fitness=score,
+            generations=1,
+            variants=2,
+            verbose=False,
+        )
+
+        assert evolved(10) == 30
+        assert evolved.__wishful_source__ == "def transform(x):\n    return x + 20"
+        assert evolved.__wishful_evolution__["original_fitness"] == 10.0
+        assert evolved.__wishful_evolution__["final_fitness"] == 30.0
+        assert evolved.__wishful_evolution__["improvement"] == "+200.0%"
+
+    def test_evolve_uses_history_for_later_mutations(self, monkeypatch):
+        """evolve should pass scored variant history into subsequent mutations."""
+        from wishful.evolve import evolve
+
+        def transform(x):
+            return x
+
+        transform.__wishful_source__ = "def transform(x):\n    return x"
+
+        seen_history = []
+        variants = iter(
+            [
+                "def transform(x):\n    return x + 1",
+                "def transform(x):\n    return x + 2",
+            ]
+        )
+
+        def fake_mutate(**kwargs):
+            seen_history.append(kwargs["history"])
+            return next(variants)
+
+        evolver_module = importlib.import_module("wishful.evolve.evolver")
+        monkeypatch.setattr(evolver_module, "mutate_with_llm", fake_mutate)
+
+        evolve(
+            transform,
+            fitness=lambda fn: float(fn(10)),
+            generations=1,
+            variants=2,
+            history_limit=5,
+            verbose=False,
+        )
+
+        assert seen_history[0][0]["fitness"] == 10.0
+        assert any(entry["fitness"] == 11.0 for entry in seen_history[1])
+
+    def test_evolve_can_disable_history_context(self, monkeypatch):
+        """keep_history=False should call mutations with an empty history."""
+        from wishful.evolve import evolve
+
+        def transform(x):
+            return x
+
+        transform.__wishful_source__ = "def transform(x):\n    return x"
+
+        seen_history = []
+
+        def fake_mutate(**kwargs):
+            seen_history.append(kwargs["history"])
+            return "def transform(x):\n    return x + 1"
+
+        evolver_module = importlib.import_module("wishful.evolve.evolver")
+        monkeypatch.setattr(evolver_module, "mutate_with_llm", fake_mutate)
+
+        evolve(
+            transform,
+            fitness=lambda fn: float(fn(10)),
+            generations=1,
+            variants=1,
+            keep_history=False,
+            verbose=False,
+        )
+
+        assert seen_history == [[]]
+
+
+class TestEvolveWithTest:
+    """Tests for correctness filters during evolution."""
+
+    def test_evolve_skips_variants_that_fail_test(self, monkeypatch):
+        """A high-scoring variant must not win if the test rejects it."""
+        from wishful.evolve import evolve
+
+        def transform(x):
+            return x
+
+        transform.__wishful_source__ = "def transform(x):\n    return x"
+
+        variants = iter(
+            [
+                "def transform(x):\n    return 999",
+                "def transform(x):\n    return x + 5",
+            ]
+        )
+
+        evolver_module = importlib.import_module("wishful.evolve.evolver")
+        monkeypatch.setattr(
+            evolver_module, "mutate_with_llm", lambda **kwargs: next(variants)
+        )
+
+        evolved = evolve(
+            transform,
+            fitness=lambda fn: float(fn(10)),
+            test=lambda fn: fn(10) < 100,
+            generations=1,
+            variants=2,
+            verbose=False,
+        )
+
+        assert evolved(10) == 15
+        failures = [
+            entry
+            for entry in evolved.__wishful_evolution__["variants"]
+            if entry["failed"]
+        ]
+        assert failures
+        assert "test returned False" in failures[0]["error"]
+
+    def test_evolve_does_not_score_original_that_fails_test(self, monkeypatch):
+        """A rejected baseline should not crash fitness before mutations run."""
+        from wishful.evolve import evolve
+
+        def transform(x):
+            return 999
+
+        transform.__wishful_source__ = "def transform(x):\n    return 999"
+
+        evolver_module = importlib.import_module("wishful.evolve.evolver")
+        monkeypatch.setattr(
+            evolver_module,
+            "mutate_with_llm",
+            lambda **kwargs: "def transform(x):\n    return x + 3",
+        )
+
+        def score(fn):
+            value = fn(10)
+            if value >= 100:
+                raise AssertionError("fitness should only score passing functions")
+            return float(value)
+
+        evolved = evolve(
+            transform,
+            fitness=score,
+            test=lambda fn: fn(10) < 100,
+            generations=1,
+            variants=1,
+            verbose=False,
+        )
+
+        assert evolved(10) == 13
+        evolution = evolved.__wishful_evolution__
+        assert evolution["original_fitness"] == 0.0
+        assert evolution["variants"][0]["failed"] is True
+        assert "test returned False" in evolution["variants"][0]["error"]
+
+    def test_evolve_raises_when_original_and_all_variants_fail(self, monkeypatch):
+        """evolve should raise with best-known context when nothing satisfies test."""
+        from wishful.evolve import evolve
+
+        def transform(x):
+            return x
+
+        transform.__wishful_source__ = "def transform(x):\n    return x"
+
+        evolver_module = importlib.import_module("wishful.evolve.evolver")
+        monkeypatch.setattr(
+            evolver_module,
+            "mutate_with_llm",
+            lambda **kwargs: "def transform(x):\n    return x + 1",
+        )
+
+        with pytest.raises(EvolutionError) as exc:
+            evolve(
+                transform,
+                fitness=lambda fn: float(fn(10)),
+                test=lambda fn: False,
+                generations=1,
+                variants=1,
+                verbose=False,
+            )
+
+        assert exc.value.generations_completed == 1
+        assert exc.value.total_attempts == 1
+
+    def test_evolve_records_mutation_errors_and_keeps_trying(self, monkeypatch):
+        """A failed mutation call should not abort the whole evolution run."""
+        from wishful.evolve import evolve
+
+        def transform(x):
+            return x
+
+        transform.__wishful_source__ = "def transform(x):\n    return x"
+
+        calls = 0
+
+        def fake_mutate(**kwargs):
+            nonlocal calls
+            calls += 1
+            if calls == 1:
+                raise RuntimeError("provider hiccup")
+            return "def transform(x):\n    return x + 3"
+
+        evolver_module = importlib.import_module("wishful.evolve.evolver")
+        monkeypatch.setattr(evolver_module, "mutate_with_llm", fake_mutate)
+
+        evolved = evolve(
+            transform,
+            fitness=lambda fn: float(fn(10)),
+            generations=1,
+            variants=2,
+            verbose=False,
+        )
+
+        assert evolved(10) == 13
+        failures = [
+            entry
+            for entry in evolved.__wishful_evolution__["variants"]
+            if entry["failed"]
+        ]
+        assert "provider hiccup" in failures[0]["error"]
+
+
+class TestEvolveIntegration:
+    """Tests for evolve package exports."""
+
+    def test_evolve_importable_from_package(self):
+        """evolve and EvolutionError should be importable from wishful.evolve."""
+        from wishful.evolve import EvolutionError as PackageEvolutionError
+        from wishful.evolve import evolve
+
+        assert callable(evolve)
+        assert PackageEvolutionError is EvolutionError
+
+    def test_evolve_importable_from_wishful(self):
+        """evolve and EvolutionError should be importable from root package."""
+        from wishful import EvolutionError as RootEvolutionError
+        from wishful import evolve
+
+        assert callable(evolve)
+        assert RootEvolutionError is EvolutionError

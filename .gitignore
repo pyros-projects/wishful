@@ -20,3 +20,5 @@ docs-site/.astro/
 docs-site/dist/
 .bmad/
 .claude/
+.memsearch/
+.pyro/

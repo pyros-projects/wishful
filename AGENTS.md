@@ -173,6 +173,21 @@ Key properties:
 - **Safety‑checked**: generated code is parsed and checked for obviously dangerous constructs.
 - **Cache‑backed**: generated modules live as `.py` files and can be edited or committed.
 
+### Active Product Direction: Code Search Workbench
+
+The current serious direction is not "one-shot helper generation." It is bounded
+code search: target artifact + mutation space + fitness function + budget +
+accept/rollback. Before extending `evolve`, `context`, CLI, demos, or the
+dashboard, read:
+
+- `docs/specs/001-wishful-evolve/implementation-plan.md`
+- `docs/specs/002-wishful-context/implementation-plan.md`
+- `docs/specs/003-wishful-code-search-workbench/concept-plan.md`
+
+The key product primitive is "function with lineage": import address, current
+source, context, variants, scores, failures, winner, evidence scope, and
+accept/rollback state.
+
 ---
 
 ## Repository Layout

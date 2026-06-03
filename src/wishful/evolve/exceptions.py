@@ -13,7 +13,7 @@ class EvolutionError(Exception):
         best_fitness: Optional[float] = None,
         original_fitness: Optional[float] = None,
         generations_completed: int = 0,
-        total_attempts: int = 0
+        total_attempts: int = 0,
     ):
         super().__init__(message)
         self.best_variant = best_variant

@@ -7,6 +7,7 @@ from typing import List, Optional
 @dataclass
 class VariantRecord:
     """Record of a single variant attempt."""
+
     source: str
     fitness: Optional[float] = None
     failed: bool = False
@@ -16,6 +17,7 @@ class VariantRecord:
 @dataclass
 class GenerationRecord:
     """Record of a single generation."""
+
     generation: int
     best_fitness: float
     variants_tried: int
@@ -25,6 +27,7 @@ class GenerationRecord:
 @dataclass
 class EvolutionHistory:
     """Complete evolution history with context for LLM."""
+
     original_fitness: float
     final_fitness: float
     generations: int
@@ -39,7 +42,11 @@ class EvolutionHistory:
         """Return improvement as percentage string."""
         if self.original_fitness == 0:
             return "N/A"
-        pct = (self.final_fitness - self.original_fitness) / abs(self.original_fitness) * 100
+        pct = (
+            (self.final_fitness - self.original_fitness)
+            / abs(self.original_fitness)
+            * 100
+        )
         sign = "+" if pct >= 0 else ""
         return f"{sign}{pct:.1f}%"
 
@@ -55,8 +62,8 @@ class EvolutionHistory:
         # Sort by fitness (handle None as worst)
         sorted_variants = sorted(
             self.all_variants,
-            key=lambda v: v.fitness if v.fitness is not None else float('-inf'),
-            reverse=True
+            key=lambda v: v.fitness if v.fitness is not None else float("-inf"),
+            reverse=True,
         )
 
         # Take top N
@@ -68,7 +75,7 @@ class EvolutionHistory:
                 "source": v.source,
                 "fitness": v.fitness,
                 "failed": v.failed,
-                "error": v.error_message
+                "error": v.error_message,
             }
             for v in top_variants
         ]
@@ -78,15 +85,17 @@ class EvolutionHistory:
         source: str,
         fitness: Optional[float] = None,
         failed: bool = False,
-        error_message: Optional[str] = None
+        error_message: Optional[str] = None,
     ):
         """Add a variant attempt to history."""
-        self.all_variants.append(VariantRecord(
-            source=source,
-            fitness=fitness,
-            failed=failed,
-            error_message=error_message
-        ))
+        self.all_variants.append(
+            VariantRecord(
+                source=source,
+                fitness=fitness,
+                failed=failed,
+                error_message=error_message,
+            )
+        )
 
     def to_dict(self) -> dict:
         """Convert to dictionary for __wishful_evolution__."""
@@ -103,5 +112,14 @@ class EvolutionHistory:
                     "variants_tried": r.variants_tried,
                 }
                 for r in self.history
-            ]
+            ],
+            "variants": [
+                {
+                    "source": v.source,
+                    "fitness": v.fitness,
+                    "failed": v.failed,
+                    "error": v.error_message,
+                }
+                for v in self.all_variants
+            ],
         }
