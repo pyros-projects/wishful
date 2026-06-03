@@ -313,9 +313,11 @@ result.accept()
 ```
 
 This is a future surface sketch. For the current post-merge code, `evolve()`
-takes a callable target. The 002 context MVP should still support string targets
-in the registry so generated or future import-address targets can be described,
-but it should only wire context into callable-based `evolve()` for now.
+takes a callable target. The 002 context work should still support string
+targets in the registry because `explore()` and static/dynamic imports are
+string-path surfaces. By the end of 002, registered context should apply to
+`evolve()`, `explore()`, and static/dynamic generation, with settings for cache
+and lookup behavior.
 
 CLI surface:
 
@@ -390,7 +392,8 @@ Complete:
 Then complete:
 
 - `docs/specs/002-wishful-context/implementation-plan.md`
-- `@wishful.context` registry and evolve integration
+- `@wishful.context` registry, settings, and integration across evolve,
+  explore, static, and dynamic generation
 
 ### Phase 1: Evidence-First Evolve Result
 
