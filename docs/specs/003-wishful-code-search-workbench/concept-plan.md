@@ -115,6 +115,160 @@ A Wishful function should eventually carry:
 - evidence scope
 - accept/rollback state
 
+## Codex-Threaded Active Imports
+
+The next step after "function with lineage" is an active import: generated code
+that owns a resumable engineering relationship with a local Codex thread.
+
+The phrase:
+
+```text
+Codex turns generated software from an artifact into a relationship.
+```
+
+This is the part that makes the Codex SDK matter for Wishful. The current
+official Codex SDK docs describe programmatic thread creation, continuing the
+same thread with later prompts, resuming a past thread by thread ID, and setting
+sandbox presets such as `read_only` and `workspace_write` per thread or turn.
+That is enough to make a generated function's maintainer state explicit instead
+of metaphorical.
+
+For Wishful, the active import shape is:
+
+```text
+missing import
+-> generated implementation
+-> generated or attached contract
+-> tests and proof gates
+-> casefile
+-> persisted Codex thread ID
+-> future failure reports resume the same thread
+```
+
+A generated function stops being only cached source. It becomes a maintained
+code object:
+
+```json
+{
+  "symbol": "wishful.static.text.extract_invoice_fields",
+  "source_path": ".wishful/text.py",
+  "spec_path": ".wishful/specs/text.extract_invoice_fields.json",
+  "tests_path": ".wishful/tests/test_text_extract_invoice_fields.py",
+  "thread_id": "codex-thread-...",
+  "authority": {
+    "generation": "workspace_write",
+    "review": "read_only",
+    "allowed_roots": [".wishful", "tests/generated"]
+  },
+  "proof": {
+    "required": ["ast_safety", "pytest", "ruff"],
+    "approval_required_for": [
+      "behavior_change",
+      "new_dependency",
+      "filesystem_access"
+    ]
+  }
+}
+```
+
+### The Import That Keeps Its Promise
+
+The smallest killer demo is not "AI wrote a parser." It is:
+
+```python
+from wishful.static.dates import parse_fuzzy_date
+```
+
+First run:
+
+- Wishful generates the implementation.
+- The active import record stores source, context, proof policy, and thread ID.
+- Tests and static safety checks produce a casefile.
+- The accepted function is cached as normal Python.
+
+Later, a production case fails:
+
+```python
+wishful.report_failure(
+    "wishful.static.dates.parse_fuzzy_date",
+    input="next Friday after Easter in Berlin",
+    observed="2026-04-10",
+    expected="2026-04-03",
+    reason="timezone and holiday logic misread",
+)
+```
+
+The same Codex thread resumes against:
+
+- the original import context
+- the current cached source
+- the recorded proof policy
+- previous failures and rejected variants
+- the new failing case
+
+It proposes a patch, adds a regression test, runs proof gates, writes a casefile,
+and asks for approval before meaningful mutation. The psychological hit is:
+
+```text
+The function remembered why it existed, learned from a failure, patched itself,
+and left receipts.
+```
+
+### Tendril Boundary
+
+Tendril is the right graph memory and proof companion, but it should not be a
+first-slice dependency for Wishful active imports.
+
+The local Tendril architecture treats graph objects as active work cells with
+scoped runtime state, authority envelopes, proof requirements, and proposal
+history. Its mutation loop is deliberately governed:
+
+```text
+artifact -> proposal -> proof -> review -> apply
+```
+
+Proof checks cover source grounding, duplicates, weak rationale, unresolved
+contradictions, topology drift, and authority-boundary violations before graph
+mutation. This maps cleanly onto Wishful casefiles:
+
+- Wishful produces a function-level casefile as an artifact.
+- Tendril can ingest that artifact and propose graph nodes or edges for reusable
+  lessons such as "locale ambiguity affects date parsing and invoice parsing."
+- Tendril proof decides whether the graph may learn the relationship.
+- Accepted graph changes carry provenance back to the casefile.
+
+So the first Wishful loop should stay local:
+
+```text
+active import -> failure report -> resumed Codex thread -> patch -> proof -> casefile
+```
+
+Then Tendril can optionally receive the casefile:
+
+```text
+casefile -> Tendril proposal -> Tendril proof -> review -> graph memory
+```
+
+This keeps the systems composable. Wishful owns generated-code maintenance.
+Tendril owns graph learning and governed memory.
+
+### Danger Line
+
+The weirdness needs a leash. The default posture should be:
+
+```text
+Generate freely.
+Patch in sandbox.
+Prove mechanically.
+Explain in a casefile.
+Require approval for meaningful mutation.
+Commit only after review.
+```
+
+Do not let the first demo silently mutate real source. Active imports are only
+interesting if the resident maintainer is bounded, inspectable, and forced to
+prove its work.
+
 ## Demo Selection Filter
 
 Bad demos:
