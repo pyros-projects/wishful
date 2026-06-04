@@ -19,6 +19,9 @@ Current branch reality:
 - The public `evolve()` loop is implemented and exported.
 - `wishful.context` is specified but not implemented.
 - The CLI/dashboard wireframe exists, but evidence/casefile mechanics do not.
+- `wishful.evolve()` currently accepts callables, not import-address strings. String
+  target evolution is part of the future CLI/evidence surface, not the current
+  public Python API.
 
 ## Core Thesis
 
@@ -111,6 +114,160 @@ A Wishful function should eventually carry:
 - winning rationale
 - evidence scope
 - accept/rollback state
+
+## Codex-Threaded Active Imports
+
+The next step after "function with lineage" is an active import: generated code
+that owns a resumable engineering relationship with a local Codex thread.
+
+The phrase:
+
+```text
+Codex turns generated software from an artifact into a relationship.
+```
+
+This is the part that makes the Codex SDK matter for Wishful. The current
+official Codex SDK docs describe programmatic thread creation, continuing the
+same thread with later prompts, resuming a past thread by thread ID, and setting
+sandbox presets such as `read_only` and `workspace_write` per thread or turn.
+That is enough to make a generated function's maintainer state explicit instead
+of metaphorical.
+
+For Wishful, the active import shape is:
+
+```text
+missing import
+-> generated implementation
+-> generated or attached contract
+-> tests and proof gates
+-> casefile
+-> persisted Codex thread ID
+-> future failure reports resume the same thread
+```
+
+A generated function stops being only cached source. It becomes a maintained
+code object:
+
+```json
+{
+  "symbol": "wishful.static.text.extract_invoice_fields",
+  "source_path": ".wishful/text.py",
+  "spec_path": ".wishful/specs/text.extract_invoice_fields.json",
+  "tests_path": ".wishful/tests/test_text_extract_invoice_fields.py",
+  "thread_id": "codex-thread-...",
+  "authority": {
+    "generation": "workspace_write",
+    "review": "read_only",
+    "allowed_roots": [".wishful", "tests/generated"]
+  },
+  "proof": {
+    "required": ["ast_safety", "pytest", "ruff"],
+    "approval_required_for": [
+      "behavior_change",
+      "new_dependency",
+      "filesystem_access"
+    ]
+  }
+}
+```
+
+### The Import That Keeps Its Promise
+
+The smallest killer demo is not "AI wrote a parser." It is:
+
+```python
+from wishful.static.dates import parse_fuzzy_date
+```
+
+First run:
+
+- Wishful generates the implementation.
+- The active import record stores source, context, proof policy, and thread ID.
+- Tests and static safety checks produce a casefile.
+- The accepted function is cached as normal Python.
+
+Later, a production case fails:
+
+```python
+wishful.report_failure(
+    "wishful.static.dates.parse_fuzzy_date",
+    input="next Friday after Easter in Berlin",
+    observed="2026-04-10",
+    expected="2026-04-03",
+    reason="timezone and holiday logic misread",
+)
+```
+
+The same Codex thread resumes against:
+
+- the original import context
+- the current cached source
+- the recorded proof policy
+- previous failures and rejected variants
+- the new failing case
+
+It proposes a patch, adds a regression test, runs proof gates, writes a casefile,
+and asks for approval before meaningful mutation. The psychological hit is:
+
+```text
+The function remembered why it existed, learned from a failure, patched itself,
+and left receipts.
+```
+
+### Tendril Boundary
+
+Tendril is the right graph memory and proof companion, but it should not be a
+first-slice dependency for Wishful active imports.
+
+The local Tendril architecture treats graph objects as active work cells with
+scoped runtime state, authority envelopes, proof requirements, and proposal
+history. Its mutation loop is deliberately governed:
+
+```text
+artifact -> proposal -> proof -> review -> apply
+```
+
+Proof checks cover source grounding, duplicates, weak rationale, unresolved
+contradictions, topology drift, and authority-boundary violations before graph
+mutation. This maps cleanly onto Wishful casefiles:
+
+- Wishful produces a function-level casefile as an artifact.
+- Tendril can ingest that artifact and propose graph nodes or edges for reusable
+  lessons such as "locale ambiguity affects date parsing and invoice parsing."
+- Tendril proof decides whether the graph may learn the relationship.
+- Accepted graph changes carry provenance back to the casefile.
+
+So the first Wishful loop should stay local:
+
+```text
+active import -> failure report -> resumed Codex thread -> patch -> proof -> casefile
+```
+
+Then Tendril can optionally receive the casefile:
+
+```text
+casefile -> Tendril proposal -> Tendril proof -> review -> graph memory
+```
+
+This keeps the systems composable. Wishful owns generated-code maintenance.
+Tendril owns graph learning and governed memory.
+
+### Danger Line
+
+The weirdness needs a leash. The default posture should be:
+
+```text
+Generate freely.
+Patch in sandbox.
+Prove mechanically.
+Explain in a casefile.
+Require approval for meaningful mutation.
+Commit only after review.
+```
+
+Do not let the first demo silently mutate real source. Active imports are only
+interesting if the resident maintainer is bounded, inspectable, and forced to
+prove its work.
 
 ## Demo Selection Filter
 
@@ -309,6 +466,13 @@ result = wishful.evolve(
 result.accept()
 ```
 
+This is a future surface sketch. For the current post-merge code, `evolve()`
+takes a callable target. The 002 context work should still support string
+targets in the registry because `explore()` and static/dynamic imports are
+string-path surfaces. By the end of 002, registered context should apply to
+`evolve()`, `explore()`, and static/dynamic generation, with settings for cache
+and lookup behavior.
+
 CLI surface:
 
 ```bash
@@ -382,7 +546,8 @@ Complete:
 Then complete:
 
 - `docs/specs/002-wishful-context/implementation-plan.md`
-- `@wishful.context` registry and evolve integration
+- `@wishful.context` registry, settings, and integration across evolve,
+  explore, static, and dynamic generation
 
 ### Phase 1: Evidence-First Evolve Result
 
@@ -476,8 +641,8 @@ Wishful has crossed from joke to serious when:
    `accept()` once evidence exists?
 2. Should `fitness` return only a float, or a richer object with metrics and
    notes?
-3. Should `@wishful.context` allow returning structured data, or only source and
-   docstring for v1?
+3. After v1 source/docstring context, should `@wishful.context` also evaluate
+   providers and capture structured return data?
 4. Should casefiles live under `.wishful/evidence/` or `.wishful/runs/`?
 5. Should demos live in `examples/` or `demos/`?
 6. Which first flagship demo do we build: parser gauntlet or hot path forge?
@@ -488,8 +653,11 @@ When resuming this work:
 
 ```bash
 cd /home/pyro/projects/private/wishful
-git switch feat/001-wishful-evolve
+git switch main
+git pull --ff-only origin main
+git switch -c feat/002-wishful-context
 uv sync
+uv run pytest tests/test_evolve.py -q
 WISHFUL_FAKE_LLM=1 uv run pytest tests/test_evolve.py -v
 ```
 
@@ -500,5 +668,5 @@ Then read:
 3. `docs/specs/002-wishful-context/implementation-plan.md`
 4. this file
 
-Start by finishing the public `evolve()` loop before touching casefiles,
-CLI, demos, or dashboard work.
+Start by implementing `docs/specs/002-wishful-context/implementation-plan.md`
+before touching casefiles, CLI, demos, or dashboard work.
