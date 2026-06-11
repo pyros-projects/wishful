@@ -1,10 +1,36 @@
 from __future__ import annotations
 
+import ast
 import importlib
 import importlib.abc
 import importlib.util
 import sys
 from types import ModuleType
+
+
+def _source_defines(source: str, name: str) -> bool:
+    """Return True if ``source`` defines ``name`` at module top level.
+
+    Used to decide whether a regeneration triggered by an attribute miss is worth
+    committing: if the model did not actually produce the requested symbol we must
+    leave the existing module and cache untouched rather than clobber them.
+    """
+    try:
+        tree = ast.parse(source)
+    except SyntaxError:
+        return False
+    for node in tree.body:
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+            if node.name == name:
+                return True
+        elif isinstance(node, ast.Assign):
+            for target in node.targets:
+                if isinstance(target, ast.Name) and target.id == name:
+                    return True
+        elif isinstance(node, ast.AnnAssign):
+            if isinstance(node.target, ast.Name) and node.target.id == name:
+                return True
+    return False
 
 from wishful.cache import manager as cache
 from wishful.config import settings
@@ -54,7 +80,10 @@ class DynamicProxyModule(ModuleType):
     }
 
     def __getattribute__(self, name):
-        if name.startswith("__") or name in DynamicProxyModule._SAFE_ATTRS:
+        # Underscore-prefixed names (dunders, _private, IPython repr probes) must
+        # never trigger a paid regeneration — resolve them normally so a probe
+        # gets a plain AttributeError instead of a generation.
+        if name.startswith("_") or name in DynamicProxyModule._SAFE_ATTRS:
             return super().__getattribute__(name)
 
         loader = super().__getattribute__("_wishful_loader")
@@ -114,9 +143,15 @@ class MagicLoader(importlib.abc.Loader):
         self._maybe_review(source)
 
     def _generate_and_cache(self, functions, context):
-        # Validate BEFORE writing so a failed generation never survives as a
-        # cache entry. A malformed (SyntaxError) generation is retried once; a
-        # policy violation (SecurityError) is raised immediately without caching.
+        source = self._generate_validated(functions, context)
+        path = self._write_source(source)
+        logger.debug("generate done fullname={} path={}", self.fullname, path)
+        return source, path
+
+    def _generate_validated(self, functions, context) -> str:
+        # Validate BEFORE the caller writes anything, so a failed generation can
+        # never survive as a cache entry. A malformed (SyntaxError) generation is
+        # retried once; a policy violation (SecurityError) is raised immediately.
         last_syntax_exc: SyntaxError | None = None
         for _ in range(2):
             source = self._invoke_generator(functions, context)
@@ -128,9 +163,7 @@ class MagicLoader(importlib.abc.Loader):
                     "Generated {} has invalid syntax; regenerating once", self.fullname
                 )
                 continue
-            path = self._write_source(source)
-            logger.debug("generate done fullname={} path={}", self.fullname, path)
-            return source, path
+            return source
         raise GenerationError(
             f"Generated code for {self.fullname} has invalid syntax after a retry"
         ) from last_syntax_exc
@@ -194,7 +227,9 @@ class MagicLoader(importlib.abc.Loader):
 
     def _attach_dynamic_getattr(self, module: ModuleType) -> None:
         def _dynamic_getattr(name: str):
-            if name.startswith("__"):
+            # Underscore-prefixed names (dunders, _private, IPython repr probes)
+            # are never worth a paid generation.
+            if name.startswith("_"):
                 raise AttributeError(name)
 
             ctx = discover(self.fullname)
@@ -202,7 +237,14 @@ class MagicLoader(importlib.abc.Loader):
             declared = self._declared_symbols(module)
             desired = sorted(declared | functions | {name})
 
-            source, path = self._generate_and_cache(desired, ctx)
+            source = self._generate_validated(desired, ctx)
+            # Only commit (write cache + re-exec the module) if the regeneration
+            # actually produced the requested symbol. Otherwise the existing
+            # module and cache stay untouched and the probe gets AttributeError.
+            if not _source_defines(source, name):
+                raise AttributeError(name)
+
+            path = self._write_source(source)
             self._exec_source(source, module, ctx, clear_first=True, file_path=str(path))
             # Re-attach for future misses after reload
             setattr(module, "__getattr__", _dynamic_getattr)  # type: ignore[assignment]

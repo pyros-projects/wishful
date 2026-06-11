@@ -333,6 +333,79 @@ def test_regenerate_dynamic_preserves_static_namesake():
     assert not manager.dynamic_snapshot_path("wishful.dynamic.report").exists()
 
 
+# --- U6: probe-safe attribute handling --------------------------------------
+
+
+def _counting_generator(call_count):
+    def gen(module, functions, context, **kwargs):
+        call_count["n"] += 1
+        body = [f"def {n}():\n    return '{n}'\n" for n in sorted(set(functions))]
+        return "\n".join(body)
+
+    return gen
+
+
+def test_underscore_probes_do_not_generate(monkeypatch):
+    call_count = {"n": 0}
+    monkeypatch.setattr(loader, "generate_module_code", _counting_generator(call_count))
+    manager.clear_cache()
+    _reset_modules()
+
+    from wishful.static.probe import foo
+
+    assert foo() == "foo"
+    assert call_count["n"] == 1
+
+    mod = sys.modules["wishful.static.probe"]
+    # Underscore-prefixed probes (IPython repr, private) raise AttributeError
+    # without a single generation.
+    assert not hasattr(mod, "_repr_html_")
+    assert getattr(mod, "_private", None) is None
+    assert getattr(mod, "__wrapped__", None) is None
+    assert call_count["n"] == 1
+
+
+def test_public_attribute_miss_still_generates(monkeypatch):
+    call_count = {"n": 0}
+    monkeypatch.setattr(loader, "generate_module_code", _counting_generator(call_count))
+    manager.clear_cache()
+    _reset_modules()
+
+    from wishful.static.probe2 import foo
+
+    assert foo() == "foo"
+    assert call_count["n"] == 1
+
+    mod = sys.modules["wishful.static.probe2"]
+    assert mod.bar() == "bar"  # a real wish for a new public symbol
+    assert call_count["n"] == 2
+
+
+def test_generation_lacking_symbol_does_not_clobber_cache(monkeypatch):
+    call_count = {"n": 0}
+
+    def stubborn(module, functions, context, **kwargs):
+        call_count["n"] += 1
+        return "def foo():\n    return 'foo'\n"  # never defines the new name
+
+    monkeypatch.setattr(loader, "generate_module_code", stubborn)
+    manager.clear_cache()
+    _reset_modules()
+
+    from wishful.static.stubborn import foo
+
+    assert foo() == "foo"
+    cached_before = manager.read_cached("wishful.static.stubborn")
+
+    mod = sys.modules["wishful.static.stubborn"]
+    with pytest.raises(AttributeError):
+        _ = mod.nonexistent
+
+    # The discarded regeneration must not have overwritten the cache or module.
+    assert manager.read_cached("wishful.static.stubborn") == cached_before
+    assert mod.foo() == "foo"
+
+
 def test_dynamic_writes_snapshot(monkeypatch):
     call_count = {"n": 0}
 
