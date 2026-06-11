@@ -8,16 +8,16 @@ authors = [
 ]
 requires-python = ">=3.12"
 dependencies = [
-    "litellm>=1.40.0",
-    "rich>=13.7.0",
+    "litellm>=1.83.14",
+    "rich>=14.0.0",
     "python-dotenv>=1.0.1",
     "pydantic>=2.12.4",
     "loguru>=0.7.3",
-    "pyglove>=0.4.5",
+    "nest-asyncio>=1.6.0",
 ]
 
 [build-system]
-requires = ["uv_build>=0.9.1,<0.10.0"]
+requires = ["uv_build>=0.11.0,<1.0.0"]
 build-backend = "uv_build"
 
 [dependency-groups]
@@ -28,5 +28,5 @@ dev = [
     "pytest>=9.0.1",
     "pytest-cov>=7.0.0",
     "radon>=6.0.1",
-    "ruff>=0.14.6",
+    "ruff>=0.15.0",
 ]
