@@ -53,9 +53,21 @@ def test_discover_returns_empty_when_no_context():
 
 
 def test_set_context_radius_updates(monkeypatch):
-    """Ensure the exported setter updates discovery radius."""
+    """The setter is a thin wrapper over configure(context_radius=...)."""
+    from wishful.config import reset_defaults, settings
+
     discovery.set_context_radius(7)
-    assert discovery._context_radius == 7
+    assert settings.context_radius == 7
+    # reset_defaults restores the env-driven default like any other knob
+    reset_defaults()
+    assert settings.context_radius == 3
+
+
+def test_set_context_radius_rejects_negative():
+    import pytest
+
+    with pytest.raises(ValueError):
+        discovery.set_context_radius(-1)
 
 
 def test_gather_usage_context_includes_calls(tmp_path):
@@ -219,3 +231,17 @@ def test_discover_works_without_registered_types(monkeypatch):
     assert ctx.function_output_types == {}
     assert ctx.functions == ["some_function"]
 
+
+
+def test_is_user_frame_normalizes_windows_paths():
+    """Backslash paths classify identically to POSIX ones (#62)."""
+    from wishful.core.discovery import _is_user_frame
+
+    # wishful's own source is not a user frame, regardless of separator
+    assert _is_user_frame("C:\\proj\\src\\wishful\\core\\loader.py") is False
+    assert _is_user_frame("/proj/src/wishful/core/loader.py") is False
+    # user code is, on both platforms
+    assert _is_user_frame("C:\\app\\main.py") is True
+    assert _is_user_frame("/app/main.py") is True
+    # tests under a wishful checkout still count as user frames
+    assert _is_user_frame("C:\\proj\\src\\wishful\\tests\\test_x.py") is True

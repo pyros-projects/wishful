@@ -1,6 +1,8 @@
 
 """Cosmic horror story that regenerates a new section on every turn."""
 
+import sys
+
 import wishful
 import wishful.dynamic.story as story
 from rich.console import Console
@@ -10,6 +12,22 @@ from rich.prompt import Prompt
 from rich.text import Text
 from rich import box
 from rich.align import Align
+
+
+def _interactive() -> bool:
+    return sys.stdin.isatty()
+
+
+def _ask(prompt: str, default: str) -> str:
+    # Headless runs (CI, the example smoke sweep) have no TTY: return the default
+    # instead of blocking on input() and raising EOFError.
+    if not _interactive():
+        return default
+    return Prompt.ask(prompt, default=default)
+
+
+# In headless mode, render a couple of sections automatically then stop.
+_HEADLESS_SECTION_LIMIT = 2
 
 console = Console()
 wishful.configure(spinner=False)
@@ -58,7 +76,7 @@ console.print("[bold red]Choose your doom:[/bold red]\n")
 for idx, hook in enumerate(hooks, 1):
     console.print(f"[dim]{idx}. {hook}[/dim]")
 
-choice = Prompt.ask(
+choice = _ask(
     "\nWhich poor soul's story do we turn into horror? Or type your own twisted idea:",
     default="1",
 )
@@ -110,12 +128,16 @@ section_num = 1
 story_so_far = intro
 
 while True:
+    # Headless: stop after a couple of auto-generated sections.
+    if not _interactive() and section_num >= _HEADLESS_SECTION_LIMIT:
+        break
+
     # Prompt with style
-    user_input = Prompt.ask(
+    user_input = _ask(
         "[dim]Press [bold]Enter[/bold] to continue into the abyss, or type [bold red]'exit'[/bold red] to escape[/dim]",
         default=""
     )
-    
+
     if user_input.lower() == 'exit':
         console.print()
         console.print(

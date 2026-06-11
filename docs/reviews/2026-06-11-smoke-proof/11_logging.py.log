@@ -1,0 +1,97 @@
+03:04:12.221715 DEBUG    loader:_load_source:218 | cache miss      logging.py:58
+                         fullname=wishful.static.data                           
+03:04:12.223691 INFO     loader:_generate_and_cache:117 |          logging.py:58
+                         Generating wishful.static.data                         
+03:04:12.224307 DEBUG    loader:_generate_and_cache:118 | generate logging.py:58
+                         start fullname=wishful.static.data                     
+                         mode=static functions=['parse_json_safe',              
+                         'dict_to_yaml']                                        
+03:04:12.224948 DEBUG    client:_log_llm_call:136 | LLM call       logging.py:58
+                         module=wishful.static.data mode=static                 
+                         model=openai/gpt-5.5 temp=1.0                          
+                         max_tokens=4096                                        
+                         functions=['parse_json_safe',                          
+                         'dict_to_yaml'] context_len=493                        
+                         type_schemas=[] output_types=[]                        
+                         preview=wishful.configure(debug=True)                  
+                                                                                
+                         # Desired: parse JSON with automatic type              
+                         conversion and validation                              
+                         from wishful.static.data import                        
+                         parse_json_safe, dict_to_yaml                          
+                                                                                
+                                                                                
+                         json_str = '{"name": "Alice", "age": 30,               
+                         "active": true}'                                       
+                                                                                
+                         json_str = '{"name": "Alice", "age": 30,               
+                         "active": true}'                                       
+                         data = parse_json_safe(json_str)                       
+                         print("Parsed JSON:", data)                            
+                                                                                
+                         # Convert to YAML format                               
+                                                                                
+                         print("Parsed JSON:", data)                            
+                                                                                
+                         # Convert to YAML format                               
+                         yaml_output = dict_to_yaml(data)                       
+                         print("\nAs YAML:")                                    
+                         print(yaml_output)                                     
+03:04:12.226578 DEBUG    client:_log_llm_call:154 | LLM prompt for logging.py:58
+                         wishful.static.data:                                   
+                         SYSTEM: You are a Python code generator.               
+                         Output ONLY executable Python code.                    
+                         - Do not wrap code in markdown fences.                 
+                         - You may use any Python libraries                     
+                         available in the environment.                          
+                         - Prefer simple, readable                              
+                         implementations.                                       
+                         - Avoid network calls, filesystem writes,              
+                         subprocess, or shell execution.                        
+                         - Include docstrings and type hints where              
+                         helpful.                                               
+                         USER: Module: wishful.static.data                      
+                                                                                
+                         Functions to implement: parse_json_safe,               
+                         dict_to_yaml                                           
+                                                                                
+                         Context:                                               
+                         wishful.configure(debug=True)                          
+                                                                                
+                         # Desired: parse JSON with automatic type              
+                         conversion and validation                              
+                         from wishful.static.data import                        
+                         parse_json_safe, dict_to_yaml                          
+                                                                                
+                                                                                
+                         json_str = '{"name": "Alice", "age": 30,               
+                         "active": true}'                                       
+                                                                                
+                         json_str = '{"name": "Alice", "age": 30,               
+                         "active": true}'                                       
+                         data = parse_json_safe(json_str)                       
+                         print("Parsed JSON:", data)                            
+                                                                                
+                         # Convert to YAML format                               
+                                                                                
+                         print("Parsed JSON:", data)                            
+                                                                                
+                         # Convert to YAML format                               
+                         yaml_output = dict_to_yaml(data)                       
+                         print("\nAs YAML:")                                    
+                         print(yaml_output)                                     
+03:05:30.248897 DEBUG    loader:_generate_and_cache:135 | generate logging.py:58
+                         done fullname=wishful.static.data                      
+                         path=.wishful/data.py                                  
+03:05:30.249692 DEBUG    loader:exec_module:95 | exec_module       logging.py:58
+                         fullname=wishful.static.data mode=static               
+                         from_cache=False file=.wishful/data.py                 
+                         functions=['parse_json_safe',                          
+                         'dict_to_yaml']                                        
+Parsed JSON: {'name': 'Alice', 'age': 30, 'active': True}
+
+As YAML:
+name: Alice
+age: 30
+active: true
+

@@ -610,7 +610,6 @@ class TestEvolveBasic:
             fitness=score,
             generations=1,
             variants=2,
-            verbose=False,
         )
 
         assert evolved(10) == 30
@@ -649,7 +648,6 @@ class TestEvolveBasic:
             generations=1,
             variants=2,
             history_limit=5,
-            verbose=False,
         )
 
         assert seen_history[0][0]["fitness"] == 10.0
@@ -679,7 +677,6 @@ class TestEvolveBasic:
             generations=1,
             variants=1,
             keep_history=False,
-            verbose=False,
         )
 
         assert seen_history == [[]]
@@ -715,7 +712,6 @@ class TestEvolveWithTest:
             test=lambda fn: fn(10) < 100,
             generations=1,
             variants=2,
-            verbose=False,
         )
 
         assert evolved(10) == 15
@@ -755,7 +751,6 @@ class TestEvolveWithTest:
             test=lambda fn: fn(10) < 100,
             generations=1,
             variants=1,
-            verbose=False,
         )
 
         assert evolved(10) == 13
@@ -787,7 +782,6 @@ class TestEvolveWithTest:
                 test=lambda fn: False,
                 generations=1,
                 variants=1,
-                verbose=False,
             )
 
         assert exc.value.generations_completed == 1
@@ -819,7 +813,6 @@ class TestEvolveWithTest:
             fitness=lambda fn: float(fn(10)),
             generations=1,
             variants=2,
-            verbose=False,
         )
 
         assert evolved(10) == 13
@@ -849,3 +842,130 @@ class TestEvolveIntegration:
 
         assert callable(evolve)
         assert RootEvolutionError is EvolutionError
+
+
+# --- U14: evolve() contract -------------------------------------------------
+
+
+class TestEvolveContract:
+    """Timeout enforcement, failure containment, and removed verbose param."""
+
+    def _identity_source(self):
+        # A trivially-evolvable function the fake LLM can mutate.
+        def score(n):
+            return n
+
+        score.__wishful_source__ = "def score(n):\n    return n\n"
+        return score
+
+    def test_verbose_param_removed(self):
+        fn = self._identity_source()
+        with pytest.raises(TypeError):
+            from wishful import evolve
+
+            evolve(fn, fitness=lambda f: 1.0, generations=1, variants=1, verbose=False)
+
+    @staticmethod
+    def _stub_mutation(monkeypatch, source="def score(n):\n    return n + 1\n"):
+        """Replace the LLM mutation with a deterministic stub.
+
+        Without this these tests call the real provider (conftest never forces
+        WISHFUL_FAKE_LLM), so a populated .env makes them spend money and flake.
+        """
+        evolver_module = importlib.import_module("wishful.evolve.evolver")
+        monkeypatch.setattr(
+            evolver_module, "mutate_with_llm", lambda **kwargs: source
+        )
+
+    def test_original_fitness_exception_does_not_crash(self, monkeypatch):
+        """A fitness() that raises on the original is recorded, not propagated."""
+        from wishful import evolve
+
+        self._stub_mutation(monkeypatch)
+        fn = self._identity_source()
+        calls = {"n": 0}
+
+        def flaky_fitness(f):
+            calls["n"] += 1
+            if calls["n"] == 1:
+                raise RuntimeError("boom on original")
+            return 1.0
+
+        # Should not raise RuntimeError; the original is marked failed and the
+        # run proceeds with mutated variants.
+        result = evolve(
+            fn, fitness=flaky_fitness, test=lambda f: True, generations=1, variants=1
+        )
+        assert callable(result)
+
+    def test_slow_fitness_is_bounded_and_loop_continues(self, monkeypatch):
+        """A fitness() that exceeds the per-variant timeout fails that variant
+        without hanging the run."""
+        import time
+
+        from wishful import evolve
+
+        self._stub_mutation(monkeypatch)
+        fn = self._identity_source()
+
+        def slow_fitness(f):
+            time.sleep(5)
+            return 1.0
+
+        with pytest.raises(EvolutionError):
+            evolve(
+                fn,
+                fitness=slow_fitness,
+                test=lambda f: True,
+                generations=1,
+                variants=1,
+                timeout_per_variant=0.2,
+            )
+
+    def test_systemexit_in_test_is_contained(self, monkeypatch):
+        """A candidate test() that calls sys.exit must not kill the host."""
+        from wishful import evolve
+
+        self._stub_mutation(monkeypatch)
+        fn = self._identity_source()
+
+        def exiting_test(f):
+            raise SystemExit(1)
+
+        with pytest.raises(EvolutionError):
+            evolve(
+                fn,
+                fitness=lambda f: 1.0,
+                test=exiting_test,
+                generations=1,
+                variants=1,
+            )
+
+    def test_mutation_call_is_bounded_by_per_variant_timeout(self, monkeypatch):
+        """The LLM mutation call must inherit the per-variant budget, not the
+        global 300s request timeout — otherwise a 'timed-out' variant's daemon
+        thread keeps the HTTP call alive far past timeout_per_variant."""
+        from wishful import evolve
+
+        mutation_module = importlib.import_module("wishful.evolve.mutation")
+        captured = {}
+
+        def fake_generate(module, functions, context, **kwargs):
+            captured["timeout"] = kwargs.get("timeout")
+            return "def score(n):\n    return n + 1\n"
+
+        monkeypatch.setattr(mutation_module, "generate_module_code", fake_generate)
+        fn = self._identity_source()
+
+        evolve(
+            fn,
+            fitness=lambda f: 1.0,
+            test=lambda f: True,
+            generations=1,
+            variants=1,
+            timeout_per_variant=7.0,
+        )
+
+        assert captured["timeout"] is not None
+        assert captured["timeout"] <= 7.0
+

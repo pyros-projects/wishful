@@ -1,0 +1,32 @@
+name: Dependency audit
+
+# Known-vulnerability scan of the locked dependency tree. Runs weekly, on
+# demand, and on PRs that change the manifest or lockfile — not on every PR,
+# so an upstream CVE can't block unrelated work.
+on:
+  schedule:
+    - cron: "17 6 * * 1" # Mondays 06:17 UTC
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - "pyproject.toml"
+      - "uv.lock"
+
+permissions:
+  contents: read
+
+jobs:
+  pip-audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - name: Export locked requirements
+        run: uv export --frozen --no-emit-project --no-hashes --format requirements-txt > /tmp/requirements.txt
+
+      - name: Audit against known vulnerabilities
+        run: uvx pip-audit --strict -r /tmp/requirements.txt

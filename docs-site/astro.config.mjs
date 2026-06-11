@@ -19,6 +19,7 @@ export default defineConfig({
         { label: 'Configuration', link: '/configuration' },
         { label: 'CLI', link: '/cli' },
         { label: 'Types', link: '/types' },
+        { label: 'Explore', link: '/explore' },
         { label: 'Advanced context discovery', link: '/advanced-context-discovery' },
         { label: 'Contributing', link: '/contributing' },
         { label: 'Changelog', link: '/changelog' }

@@ -1,0 +1,11 @@
+
+
+valid@example.com         -> ✓ valid
+invalid@                  -> ✗ invalid
+also@valid.co.uk          -> ✓ valid
+nope                      -> ✗ invalid
+
+Sanitized HTML: <p>Hello <b>world</b>!</p>
+
+Normalized: 'hello world foo bar'
+EXIT=0 SECS=35

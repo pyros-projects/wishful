@@ -1,8 +1,13 @@
 from __future__ import annotations
 
+import re
 from typing import List, Sequence
 
 from wishful.config import settings
+
+# A fenced block: an opening fence with an optional info string (``python``), a
+# newline, then the body captured non-greedily up to the closing fence.
+_FENCE_BLOCK = re.compile(r"```[^\n]*\n(.*?)```", re.DOTALL)
 
 
 def build_messages(
@@ -62,13 +67,23 @@ def build_messages(
 
 
 def strip_code_fences(text: str) -> str:
-    """Remove Markdown code fences if present."""
+    """Return the code inside Markdown fences, dropping the language info string.
+
+    When the response contains one or more fenced blocks, only the fenced content
+    is returned (blocks joined by a blank line); surrounding prose and the opening
+    fence's language tag (e.g. ``python``) are stripped. Fence-free responses are
+    returned unchanged. This is deliberate: a naive split left the ``python`` tag
+    as the first source line, which parsed as a bare name and crashed at exec.
+    """
 
     if "```" not in text:
         return text
 
-    parts = text.split("```")
-    if len(parts) >= 3:
-        # content between first and second fence
-        return parts[1].strip('\n') if parts[0].strip() == "" else parts[1]+parts[2]
-    return text
+    blocks = _FENCE_BLOCK.findall(text)
+    if blocks:
+        return "\n\n".join(block.rstrip("\n") for block in blocks).strip()
+
+    # A stray opening fence with no matching close: drop the fence line (and its
+    # language tag) plus any remaining backticks, keep whatever code is left.
+    without_open = re.sub(r"```[^\n]*\n?", "", text, count=1)
+    return without_open.replace("```", "").strip()

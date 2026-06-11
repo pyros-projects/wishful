@@ -1,0 +1,63 @@
+
+🪄 Type Registry Examples for Wishful
+
+These examples show how to register complex types so the LLM
+can generate functions that return properly structured data.
+
+
+===================================
+Example 1: Simple Type Registration
+===================================
+
+
+Generated book: Book(title='The Left Hand of Darkness', author='Ursula K. Le Guin', year=1969, isbn='9780441478125')
+Type: <class 'wishful.static.library.Book'>
+
+================================
+Example 2: Typed Function Output
+================================
+
+
+Parsed profile: UserProfile(name='John Doe', email='john@example.com', age=30, is_active=True)
+Name: John Doe
+Email: john@example.com
+Age: 30
+
+==============================================
+Example 3: Multiple Functions with Shared Type
+==============================================
+
+
+Parsed product: {'name': 'Laptop', 'price': 999.99, 'in_stock': True, 'category': 'Electronics'}
+Created product: {'name': 'Mouse', 'price': 29.99, 'in_stock': True, 'category': 'Accessories'}
+
+===============================
+Example 4: Nested Complex Types
+===============================
+
+
+Extracted contact: ContactInfo(name='Alice Smith', phone='555-1234', email='alice@example.com', address=Address(street='123 Main St', city='Springfield', state='IL', zip_code='62701'))
+Lives in: Springfield, IL
+
+================================
+Example 5: Types with Validation
+================================
+
+
+Age validation result: Person(name='Validated Person', age=25)
+Birth year calculation: Person(name='Born in 1995', age=30)
+
+====================================
+Example 6: Pydantic with Constraints
+====================================
+
+
+project_brief='For the sudoku web app, a steady path we need. Simple, useful, and reliable it must become. Begin with the user, build in small steps, test often, and learn quickly, we shall.' milestones=['Understand the goal of the sudoku web app, we must.', 'Gather user needs and success measures, carefully do.', 'Define core features and boundaries, clear they must be.', 'Sketch simple user journeys and screens, next we shall.', 'Choose the technology stack and architecture, wisely decide.', 'Create the data model and validation rules, strong make them.', 'Build the smallest useful prototype, first ship it we will.', 'Add main workflows, error handling, and helpful feedback.', 'Test functionality, accessibility, and performance, thorough be.', 'Review security, privacy, and deployment readiness.', 'Launch to early users and collect feedback, learn we shall.', 'Iterate from feedback and plan the next release, improve always.']
+
+Note: The docstring makes the LLM write in Yoda-speak!
+And min_length=10 ensures at least 10 milestones.
+
+============================================================
+✨ All examples completed!
+============================================================
+EXIT=0 SECS=145

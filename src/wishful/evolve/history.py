@@ -1,7 +1,41 @@
 """Evolution history tracking for AlphaEvolve-style context passing."""
 
 from dataclasses import dataclass, field
-from typing import List, Optional
+from typing import List, Optional, TypedDict
+
+# Schema version for __wishful_evolution__. Bump on any shape change so
+# downstream consumers (spec-003 casefiles) can dispatch on it.
+EVOLUTION_SCHEMA_VERSION = 1
+
+
+class GenerationSummary(TypedDict):
+    """One generation's outcome inside ``EvolutionMetadata``."""
+
+    generation: int
+    best_fitness: float
+    variants_tried: int
+
+
+class VariantSummary(TypedDict):
+    """One variant attempt inside ``EvolutionMetadata``."""
+
+    source: str
+    fitness: Optional[float]
+    failed: bool
+    error: Optional[str]
+
+
+class EvolutionMetadata(TypedDict):
+    """The versioned shape of ``__wishful_evolution__``."""
+
+    schema_version: int
+    original_fitness: float
+    final_fitness: float
+    improvement: str
+    generations: int
+    total_variants_tried: int
+    history: List[GenerationSummary]
+    variants: List[VariantSummary]
 
 
 @dataclass
@@ -97,9 +131,10 @@ class EvolutionHistory:
             )
         )
 
-    def to_dict(self) -> dict:
-        """Convert to dictionary for __wishful_evolution__."""
+    def to_dict(self) -> EvolutionMetadata:
+        """Convert to the versioned ``__wishful_evolution__`` dict."""
         return {
+            "schema_version": EVOLUTION_SCHEMA_VERSION,
             "original_fitness": self.original_fitness,
             "final_fitness": self.final_fitness,
             "improvement": self.improvement,

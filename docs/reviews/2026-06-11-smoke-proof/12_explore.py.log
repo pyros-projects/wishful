@@ -1,0 +1,143 @@
+🔍 wishful.explore - Generate Multiple Variants
+
+Generate multiple implementations and select the best through
+testing, benchmarking, or both!
+
+
+========================================
+Example 1: Basic - First Passing Variant
+========================================
+╭────────── 🔍 wishful.explore → wishful.static.text.extract_emails ───────────╮
+│                                                                              │
+│    Exploring extract_emails ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 3/3 • 0:01:26     │
+│  Strategy:  first_passing                                                    │
+│  Passed:    1                                                                │
+│  Failed:    2                                                                │
+│                                   Variants                                   │
+│  ┏━━━━━━┳━━━━━━━━━━━━┳━━━━━━━━━┳━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓  │
+│  ┃    # ┃ Status     ┃    Time ┃ Info                                     ┃  │
+│  ┡━━━━━━╇━━━━━━━━━━━━╇━━━━━━━━━╇━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┩  │
+│  │    0 │ timeout    │     ... │ Generation timed out                     │  │
+│  │    1 │ timeout    │     ... │ Generation timed out                     │  │
+│  │    2 │ passed     │   26.5s │ import re from typing import Iterable, L │  │
+│  └──────┴────────────┴─────────┴──────────────────────────────────────────┘  │
+│                                                                              │
+╰──────────────────────────────────────────────────────────────────────────────╯
+✅ Found working parser!
+Result: ['alice@example.com', 'bob@test.org']
+Metadata: {'module': 'wishful.static.text', 'function': 'extract_emails', 'variant_index': 2, 'generation_time': 26.48942357499618, 'benchmark_score': None}
+
+===================================
+Example 2: Benchmark - Find Fastest
+===================================
+╭──────── 🔍 wishful.explore → wishful.static.algorithms.sort_integers ────────╮
+│                                                                              │
+│    Exploring sort_integers ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 5/5 • 0:00:54      │
+│  Strategy:      fastest                                                      │
+│  Passed:        5                                                            │
+│  Failed:        0                                                            │
+│  Best Score:    2142245.86                                                   │
+│  Best Variant:  #2                                                           │
+│                                   Variants                                   │
+│  ┏━━━━━┳━━━━━━━━━━━━┳━━━━━━━━━┳━━━━━━━━━━━━┳━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓  │
+│  ┃   # ┃ Status     ┃    Time ┃      Score ┃ Info                         ┃  │
+│  ┡━━━━━╇━━━━━━━━━━━━╇━━━━━━━━━╇━━━━━━━━━━━━╇━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┩  │
+│  │   0 │ passed     │    7.3s │ 2081338.70 │ from typing import Iterable, │  │
+│  │     │            │         │            │ List   def                   │  │
+│  │   1 │ passed     │    9.7s │ 2030621.39 │ from collections.abc import  │  │
+│  │     │            │         │            │ Iterable fro                 │  │
+│  │   2 │ passed     │   11.4s │ 2142245.86 │ from __future__ import       │  │
+│  │     │            │         │            │ annotations  from            │  │
+│  │   3 │ passed     │   15.0s │ 2004011.46 │ from typing import Iterable, │  │
+│  │     │            │         │            │ List  __all                  │  │
+│  │   4 │ passed     │   10.8s │ 2072880.67 │ from typing import Iterable, │  │
+│  │     │            │         │            │ List  __all                  │  │
+│  └─────┴────────────┴─────────┴────────────┴──────────────────────────────┘  │
+│                                                                              │
+╰──────────────────────────────────────────────────────────────────────────────╯
+✅ Found fastest sort!
+Result: [1, 1, 2, 3, 4, 5, 6, 9]
+Benchmark score: 2142245.9 ops/sec
+
+====================================
+Example 3: Test + Benchmark Combined
+====================================
+╭────────── 🔍 wishful.explore → wishful.static.algorithms.sort_list ──────────╮
+│                                                                              │
+│    Exploring sort_list ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 5/5 • 0:01:07          │
+│  Strategy:      fastest                                                      │
+│  Passed:        5                                                            │
+│  Failed:        0                                                            │
+│  Best Score:    56047.57                                                     │
+│  Best Variant:  #3                                                           │
+│                                   Variants                                   │
+│  ┏━━━━━┳━━━━━━━━━━━━┳━━━━━━━━━┳━━━━━━━━━━━━┳━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓  │
+│  ┃   # ┃ Status     ┃    Time ┃      Score ┃ Info                         ┃  │
+│  ┡━━━━━╇━━━━━━━━━━━━╇━━━━━━━━━╇━━━━━━━━━━━━╇━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┩  │
+│  │   0 │ passed     │   16.5s │   53450.07 │ from collections.abc import  │  │
+│  │     │            │         │            │ Iterable, Ca                 │  │
+│  │   1 │ passed     │   18.2s │   54743.47 │ from __future__ import       │  │
+│  │     │            │         │            │ annotations  from            │  │
+│  │   2 │ passed     │   10.0s │   55456.86 │ from typing import Iterable, │  │
+│  │     │            │         │            │ List, Optio                  │  │
+│  │   3 │ passed     │   10.3s │   56047.57 │ """Static algorithm          │  │
+│  │     │            │         │            │ utilities for the wi         │  │
+│  │   4 │ passed     │   12.4s │   52651.02 │ from collections.abc import  │  │
+│  │     │            │         │            │ Callable, It                 │  │
+│  └─────┴────────────┴─────────┴────────────┴──────────────────────────────┘  │
+│                                                                              │
+╰──────────────────────────────────────────────────────────────────────────────╯
+✅ Found correct AND fast implementation!
+Test: [1, 2, 5, 8, 9]
+
+======================================
+Example 4: Silent Mode (verbose=False)
+======================================
+Running exploration silently...
+✅ Done! Result for fib(10): 55
+
+=========================
+Example 5: Error Handling
+=========================
+╭──────────── 🔍 wishful.explore → wishful.static.impossible.magic ────────────╮
+│                                                                              │
+│    Exploring magic ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 3/3 • 0:01:30              │
+│  Strategy:  first_passing                                                    │
+│  Passed:    0                                                                │
+│  Failed:    3                                                                │
+│                                   Variants                                   │
+│  ┏━━━━━━━━┳━━━━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓  │
+│  ┃      # ┃ Status           ┃        Time ┃ Info                         ┃  │
+│  ┡━━━━━━━━╇━━━━━━━━━━━━━━━━━━╇━━━━━━━━━━━━━╇━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┩  │
+│  │      0 │ timeout          │         ... │ Generation timed out         │  │
+│  │      1 │ timeout          │         ... │ Generation timed out         │  │
+│  │      2 │ timeout          │         ... │ Generation timed out         │  │
+│  └────────┴──────────────────┴─────────────┴──────────────────────────────┘  │
+│                                                                              │
+╰──────────────────────────────────────────────────────────────────────────────╯
+❌ Caught ExplorationError!
+  Attempts: 3
+  Failures: 3
+    - Generation timed out...
+    - Generation timed out...
+
+============================================================
+📊 CSV results saved to: .wishful/_explore/
+============================================================
+
+Saved exploration files:
+  📄 extract_emails_20260611_030652.csv
+  📄 fibonacci_20260611_030913.csv
+  📄 magic_20260611_031036.csv
+  📄 sort_integers_20260611_030741.csv
+  📄 sort_list_20260611_030843.csv
+
+============================================================
+✨ Key Takeaways:
+  • explore() generates multiple variants of a function
+  • Use test= to filter by correctness
+  • Use benchmark= to select by performance
+  • The winning variant is cached to .wishful/
+  • verbose=True shows beautiful progress (default)
+  • save_results=True exports to CSV (default)
+============================================================

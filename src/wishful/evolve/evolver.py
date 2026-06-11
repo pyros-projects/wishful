@@ -4,13 +4,60 @@ from __future__ import annotations
 
 import textwrap
 from collections.abc import Callable
+from functools import partial
 from typing import Any
 
 from wishful.config import settings
+from wishful.core.execution import compile_and_exec, run_user_callable as _call_user
 from wishful.evolve.exceptions import EvolutionError
 from wishful.evolve.history import EvolutionHistory, GenerationRecord
 from wishful.evolve.mutation import get_function_source, mutate_with_llm
-from wishful.safety.validator import validate_code
+
+
+class EvolutionResult:
+    """Callable wrapper around an evolution winner.
+
+    Behaves like the winning function — calling it delegates to ``fn``, and
+    ``__name__``/``__wishful_source__``/``__wishful_evolution__`` and every
+    other attribute proxy to the winner via ``__getattr__`` (proxy, not copy,
+    so chained ``evolve(evolve(fn))`` reads the winner's current metadata).
+    ``__wrapped__`` is set so ``inspect.signature(result)`` resolves to the
+    winner's signature. The run's evidence rides along as ``history`` and
+    ``best_score``.
+
+    Deliberately ships **no** ``accept()`` method: spec-003 Open Decision 1
+    (auto-cache vs require-accept) is unresolved, and a silent no-op would let
+    callers form beliefs that later become behavior changes. Adding it later
+    is non-breaking.
+    """
+
+    def __init__(self, fn: Callable[..., Any], history: EvolutionHistory):
+        self.fn = fn
+        self.history = history
+        self.best_score = history.final_fitness
+        self.__wrapped__ = fn
+
+    def __call__(self, *args: Any, **kwargs: Any) -> Any:
+        return self.fn(*args, **kwargs)
+
+    def __getattr__(self, name: str) -> Any:
+        # Fires only for names not on the instance/class — i.e. everything the
+        # winner carries (__name__, __wishful_source__, __wishful_evolution__, …).
+        # Fetch fn via __dict__: during copy/deepcopy/unpickle an empty instance
+        # probes dunders before __init__ ran, and a plain self.fn would re-enter
+        # __getattr__ infinitely.
+        fn = self.__dict__.get("fn")
+        if fn is None:
+            raise AttributeError(name)
+        return getattr(fn, name)
+
+    @property  # the class docstring must not shadow the winner's
+    def __doc__(self) -> str | None:  # type: ignore[override]
+        return self.fn.__doc__
+
+    def __repr__(self) -> str:
+        name = getattr(self.fn, "__name__", "<fn>")
+        return f"<EvolutionResult {name} best_score={self.best_score}>"
 
 
 def evolve(
@@ -24,8 +71,7 @@ def evolve(
     keep_history: bool = True,
     history_limit: int = 10,
     timeout_per_variant: float = 30.0,
-    verbose: bool = True,
-) -> Callable[..., Any]:
+) -> EvolutionResult:
     """Improve a function by mutating it and selecting higher-fitness variants.
 
     Args:
@@ -37,12 +83,14 @@ def evolve(
         mutation_prompt: Human guidance included in the mutation prompt.
         keep_history: Whether prior attempts should be passed to the LLM.
         history_limit: Maximum number of prior attempts to include in mutation context.
-        timeout_per_variant: Reserved for future timeout enforcement.
-        verbose: Reserved for future progress output.
+        timeout_per_variant: Per-variant wall-clock bound for the mutation call and
+            the user-supplied test/fitness callables. A variant that exceeds it is
+            recorded as failed and the loop continues.
 
     Returns:
-        The best passing function, annotated with ``__wishful_source__`` and
-        ``__wishful_evolution__``.
+        An :class:`EvolutionResult` — callable like the winner itself, with
+        ``__wishful_source__``/``__wishful_evolution__`` proxied from it and
+        the run's ``history`` and ``best_score`` attached.
 
     Raises:
         EvolutionError: If the original function and all variants fail the test.
@@ -51,8 +99,17 @@ def evolve(
 
     function_name = fn.__name__
     current_source = _normalized_function_source(fn)
-    original_passed, original_error = _passes_test(fn, test)
-    original_fitness = _score_variant(fn, fitness) if original_passed else 0.0
+    original_passed, original_error = _passes_test(fn, test, timeout_per_variant)
+    original_fitness = 0.0
+    if original_passed:
+        original_fitness, original_score_error = _score_variant(
+            fn, fitness, timeout_per_variant
+        )
+        if original_score_error is not None:
+            # Scoring the original must not crash the run before any mutation.
+            original_passed = False
+            original_error = original_score_error
+            original_fitness = 0.0
 
     history = EvolutionHistory(
         original_fitness=original_fitness,
@@ -82,46 +139,59 @@ def evolve(
             mutation_history = (
                 history.get_context_for_llm(limit=history_limit) if keep_history else []
             )
-            try:
-                candidate_source = mutate_with_llm(
+            # Cap the LLM call itself at the per-variant budget. _call_user runs it
+            # on a daemon thread it cannot cancel, so without this bound a "timed
+            # out" mutation keeps its HTTP request alive up to settings.request_timeout
+            # (300s) long after the loop moved on. partial() freezes the per-iteration
+            # values now, so an abandoned thread can't read state a later iteration
+            # mutated.
+            mutate_timeout = min(timeout_per_variant, settings.request_timeout)
+            ok, candidate_source, mutate_error = _call_user(
+                partial(
+                    mutate_with_llm,
                     source=best_source,
                     mutation_prompt=mutation_prompt,
                     function_name=function_name,
                     history=mutation_history,
-                )
-            except Exception as exc:
-                history.add_variant(
-                    "",
-                    failed=True,
-                    error_message=f"{type(exc).__name__}: {exc}",
-                )
+                    timeout=mutate_timeout,
+                ),
+                timeout_per_variant,
+            )
+            if not ok:
+                history.add_variant("", failed=True, error_message=mutate_error)
                 continue
 
             try:
                 candidate = _compile_function(candidate_source, function_name)
-                passed, error_message = _passes_test(candidate, test)
-                if not passed:
-                    history.add_variant(
-                        candidate_source,
-                        failed=True,
-                        error_message=error_message,
-                    )
-                    continue
-
-                candidate_fitness = _score_variant(candidate, fitness)
-                history.add_variant(candidate_source, fitness=candidate_fitness)
-
-                if best_fn is None or candidate_fitness > best_fitness:
-                    best_fn = candidate
-                    best_source = textwrap.dedent(candidate_source).strip()
-                    best_fitness = candidate_fitness
-
             except Exception as exc:
                 history.add_variant(
                     candidate_source,
                     failed=True,
                     error_message=f"{type(exc).__name__}: {exc}",
                 )
+                continue
+
+            passed, error_message = _passes_test(candidate, test, timeout_per_variant)
+            if not passed:
+                history.add_variant(
+                    candidate_source, failed=True, error_message=error_message
+                )
+                continue
+
+            candidate_fitness, score_error = _score_variant(
+                candidate, fitness, timeout_per_variant
+            )
+            if score_error is not None:
+                history.add_variant(
+                    candidate_source, failed=True, error_message=score_error
+                )
+                continue
+
+            history.add_variant(candidate_source, fitness=candidate_fitness)
+            if best_fn is None or candidate_fitness > best_fitness:
+                best_fn = candidate
+                best_source = textwrap.dedent(candidate_source).strip()
+                best_fitness = candidate_fitness
 
         recorded_fitness = best_fitness if best_fn is not None else original_fitness
         history.history.append(
@@ -149,7 +219,7 @@ def evolve(
     history.generations = generations
     history.total_variants_tried = total_attempts
     _attach_evolution_metadata(best_fn, best_source, history)
-    return best_fn
+    return EvolutionResult(best_fn, history)
 
 
 def _validate_evolve_args(
@@ -175,35 +245,43 @@ def _normalized_function_source(fn: Callable[..., Any]) -> str:
 def _passes_test(
     fn: Callable[..., Any],
     test: Callable[[Callable[..., Any]], bool] | None,
+    timeout: float,
 ) -> tuple[bool, str | None]:
     if test is None:
         return True, None
-    try:
-        if test(fn):
-            return True, None
-        return False, "test returned False"
-    except Exception as exc:
-        return False, f"{type(exc).__name__}: {exc}"
+    ok, value, error = _call_user(lambda: test(fn), timeout)
+    if not ok:
+        return False, error
+    if value:
+        return True, None
+    return False, "test returned False"
 
 
 def _score_variant(
     fn: Callable[..., Any],
     fitness: Callable[[Callable[..., Any]], float],
-) -> float:
-    return float(fitness(fn))
+    timeout: float,
+) -> tuple[float, str | None]:
+    """Return ``(fitness, None)`` or ``(0.0, error)`` — never raises through."""
+    ok, value, error = _call_user(lambda: fitness(fn), timeout)
+    if not ok:
+        return 0.0, error
+    try:
+        return float(value), None
+    except (TypeError, ValueError) as exc:
+        return 0.0, f"fitness returned non-numeric value: {exc}"
 
 
 def _compile_function(source: str, function_name: str) -> Callable[..., Any]:
     normalized_source = textwrap.dedent(source).strip()
-    validate_code(normalized_source, allow_unsafe=settings.allow_unsafe)
-    namespace: dict[str, Any] = {}
-    exec(compile(normalized_source, "<wishful.evolve>", "exec"), namespace)
-
-    candidate = namespace.get(function_name)
-    if not callable(candidate):
+    try:
+        candidate = compile_and_exec(
+            normalized_source, function_name, filename="<wishful.evolve>"
+        )
+    except ValueError as exc:
         raise EvolutionError(
             f"Generated source did not define callable {function_name!r}"
-        )
+        ) from exc
 
     setattr(candidate, "__wishful_source__", normalized_source)
     return candidate

@@ -2,15 +2,23 @@
 
 from __future__ import annotations
 
+import ast
 import asyncio
-import atexit
+import concurrent.futures
+import os
+import re
+import sys
+import threading
 import time
 import warnings
+from functools import partial
 from typing import Callable, List, Literal, Optional, Tuple, Union
 
-from wishful.cache.manager import write_cached
+from wishful.cache.manager import read_cached, write_cached
 from wishful.config import settings
+from wishful.core.execution import compile_and_exec, run_user_callable
 from wishful.explore.exceptions import ExplorationError
+from wishful.logging import logger
 from wishful.explore.progress import (
     AsyncExploreLiveDisplay,
     ExploreProgress,
@@ -18,71 +26,185 @@ from wishful.explore.progress import (
 )
 from wishful.explore.variant import VariantMetadata, wrap_with_metadata
 from wishful.llm.client import agenerate_module_code
-from wishful.safety.validator import validate_code
+from wishful.types.registry import get_all_type_schemas, get_output_type_for_function
+from wishful.safety.validator import SecurityError, validate_code
 
-# Suppress litellm's async cleanup warnings at module level (they're harmless)
+# Suppress litellm's fire-and-forget logging coroutines being abandoned at
+# process exit. Scoped to litellm's Logging.* coroutines only — a user's own
+# forgotten ``await`` still warns. (GC-time warnings can't be scoped by call
+# site, so message-scoping is the tightest filter possible.)
 warnings.filterwarnings(
     "ignore",
-    message=".*coroutine.*was never awaited.*",
+    message=r".*coroutine 'Logging\..*' was never awaited.*",
     category=RuntimeWarning,
 )
 
-# Cache event loop to avoid litellm's LoggingWorker issues with multiple asyncio.run() calls
-_cached_loop: Optional[asyncio.AbstractEventLoop] = None
+# explore() runs its async pipeline on ONE persistent loop owned by wishful,
+# living on a dedicated daemon thread. Verified 2026-06-11 against gpt-4.1 on
+# litellm 1.88.1: per-call asyncio.run() still abandons litellm's
+# Logging.async_success_handler coroutines (the loop dies before they run), so
+# the plan's conservative owned-loop design applies — never the host's loop,
+# never nest_asyncio.
+_loop_lock = threading.Lock()
+_owned_loop: Optional[asyncio.AbstractEventLoop] = None
+_owned_thread: Optional[threading.Thread] = None
+_owned_pid: Optional[int] = None
 
 
-def _get_or_create_event_loop() -> asyncio.AbstractEventLoop:
-    """Get existing event loop or create a new one (reusable across calls)."""
-    global _cached_loop
-    
-    # Try to get existing loop
-    try:
-        loop = asyncio.get_running_loop()
+def _get_owned_loop() -> asyncio.AbstractEventLoop:
+    """Start (or restart) and return wishful's background event loop.
+
+    A loop is only reusable while its runner thread is alive in THIS process:
+    a thread killed by an exception leaves ``is_closed() == False`` but never
+    runs another callback, and a fork (Linux-default multiprocessing) clones
+    the loop object without its thread — both used to hang future.result()
+    forever. Detect either case and start a fresh loop+thread pair.
+    """
+    global _owned_loop, _owned_thread, _owned_pid
+    with _loop_lock:
+        if (
+            _owned_loop is not None
+            and not _owned_loop.is_closed()
+            and _owned_thread is not None
+            and _owned_thread.is_alive()
+            and _owned_pid == os.getpid()
+        ):
+            return _owned_loop
+        if _owned_loop is not None and not _owned_loop.is_closed() and _owned_pid == os.getpid():
+            _owned_loop.close()  # dead thread; release the loop's resources
+        loop = asyncio.new_event_loop()
+        thread = threading.Thread(
+            target=loop.run_forever, name="wishful-explore-loop", daemon=True
+        )
+        thread.start()
+        _owned_loop, _owned_thread, _owned_pid = loop, thread, os.getpid()
         return loop
-    except RuntimeError:
-        pass
-    
-    # Reuse cached loop if it's still valid
-    if _cached_loop is not None and not _cached_loop.is_closed():
-        return _cached_loop
-    
-    # Create new loop and cache it
-    _cached_loop = asyncio.new_event_loop()
-    return _cached_loop
-
-
-def _cleanup_loop():
-    """Clean up the cached event loop on exit."""
-    global _cached_loop
-    if _cached_loop is not None and not _cached_loop.is_closed():
-        try:
-            # Cancel pending tasks
-            pending = asyncio.all_tasks(_cached_loop)
-            for task in pending:
-                task.cancel()
-            # Don't close - let Python handle it to avoid warnings
-        except Exception:
-            pass
-
-
-atexit.register(_cleanup_loop)
 
 
 def _run_async(coro):
-    """Run async coroutine, reusing event loop to avoid litellm issues."""
-    loop = _get_or_create_event_loop()
-    
-    # If we're already in an event loop, we can't use run_until_complete
+    """Run an exploration coroutine on the owned loop and block for the result.
+
+    Safe both from plain sync code and from inside a running event loop
+    (Jupyter): the coroutine executes on wishful's background loop, so the
+    host's loop is never re-entered or monkeypatched — the calling thread
+    simply blocks until the exploration finishes, as a synchronous explore()
+    has always done.
+
+    The wait is a watchdog poll rather than a bare ``future.result()``: if the
+    loop thread dies mid-run, the future would otherwise never resolve and the
+    caller would hang forever.
+    """
+    future = asyncio.run_coroutine_threadsafe(coro, _get_owned_loop())
     try:
-        asyncio.get_running_loop()
-        # Already in async context - shouldn't happen in normal usage
-        # but handle gracefully
-        import nest_asyncio
-        nest_asyncio.apply()
-        return loop.run_until_complete(coro)
-    except RuntimeError:
-        # Not in async context - normal case
-        return loop.run_until_complete(coro)
+        while True:
+            try:
+                return future.result(timeout=1.0)
+            except concurrent.futures.TimeoutError:
+                if _owned_thread is not None and not _owned_thread.is_alive():
+                    future.cancel()
+                    raise RuntimeError(
+                        "wishful's exploration event-loop thread died mid-run; "
+                        "the next explore() call will start a fresh loop"
+                    ) from None
+    except KeyboardInterrupt:
+        future.cancel()
+        raise
+
+
+def _merge_into_module(existing, function_name: str, winner_source: str) -> str:
+    """Merge a winning variant into an existing cached module.
+
+    Replaces only the explored function and preserves any other symbols already
+    cached in the module — exploring one function must not wipe its siblings. If
+    there is no existing module (or it cannot be parsed), the winner is used as-is.
+    """
+    if not existing or not existing.strip():
+        return winner_source
+    try:
+        tree = ast.parse(existing)
+    except SyntaxError:
+        return winner_source
+    kept = [
+        node
+        for node in tree.body
+        if not (
+            isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef))
+            and node.name == function_name
+        )
+    ]
+    if len(kept) == len(tree.body):
+        prefix = existing.rstrip()  # function wasn't here before; keep verbatim
+    else:
+        tree.body = kept
+        prefix = ast.unparse(tree).rstrip()
+    if not prefix.strip():
+        return winner_source
+    # The winner is appended after the kept siblings, so any top-level name it
+    # shares with a sibling silently rebinds that sibling (later definition wins at
+    # exec). We can't safely rename without risking the winner, but a silent wipe
+    # violates the "exploring one function must not wipe its siblings" contract —
+    # surface it loudly so the caller knows the cache no longer holds the original.
+    collisions = (
+        _top_level_names(prefix) & _top_level_names(winner_source)
+    ) - {function_name}
+    if collisions:
+        logger.warning(
+            "explore(): the winner for {} redefines existing sibling symbol(s) {}; "
+            "its definitions shadow the cached ones in the merged module.",
+            function_name,
+            ", ".join(sorted(collisions)),
+        )
+    merged = _hoist_future_imports(prefix + "\n\n\n" + winner_source.lstrip())
+    # ast.parse (used by the validator) does not enforce __future__ placement, but
+    # compile() does — verify the merged file actually compiles, else fall back to
+    # the winner alone so a broken cache is never written.
+    try:
+        compile(merged, "<wishful-merge>", "exec")
+    except SyntaxError:
+        return winner_source
+    return merged
+
+
+def _top_level_names(source: str) -> set[str]:
+    """Top-level def/class/assignment names bound by ``source`` (best-effort)."""
+    try:
+        tree = ast.parse(source)
+    except SyntaxError:
+        return set()
+    names: set[str] = set()
+    for node in tree.body:
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+            names.add(node.name)
+        elif isinstance(node, ast.Assign):
+            for target in node.targets:
+                if isinstance(target, ast.Name):
+                    names.add(target.id)
+        elif isinstance(node, ast.AnnAssign) and isinstance(node.target, ast.Name):
+            names.add(node.target.id)
+    return names
+
+
+_FUTURE_RE = re.compile(r"^[ \t]*from[ \t]+__future__[ \t]+import[ \t]+.*$", re.MULTILINE)
+
+
+def _hoist_future_imports(source: str) -> str:
+    """Move every ``from __future__ import ...`` to the top (deduped).
+
+    A merged module can end up with a __future__ import after the first sibling
+    symbol, which compiles to a SyntaxError. Collect them and emit a single
+    leading block.
+    """
+    futures = _FUTURE_RE.findall(source)
+    if not futures:
+        return source
+    features: list[str] = []
+    for line in futures:
+        for name in line.split("import", 1)[1].split(","):
+            name = name.strip()
+            if name and name not in features:
+                features.append(name)
+    body = _FUTURE_RE.sub("", source).lstrip("\n")
+    return f"from __future__ import {', '.join(features)}\n\n" + body
 
 
 def explore(
@@ -94,8 +216,8 @@ def explore(
     optimize: Literal["first_passing", "fastest", "best_score"] = "first_passing",
     timeout_per_variant: float = 30.0,
     return_all: bool = False,
-    verbose: bool = True,
-    save_results: bool = True,
+    verbose: Optional[bool] = None,
+    save_results: Optional[bool] = None,
 ) -> Union[Callable, List[Callable]]:
     """
     Generate multiple variants of a function and select the best one.
@@ -111,8 +233,10 @@ def explore(
             - "best_score": Alias for "fastest"
         timeout_per_variant: Max seconds to spend generating each variant
         return_all: If True, return list of all valid variants instead of just best
-        verbose: If True, show live progress display (default: True)
-        save_results: If True, save results to CSV in cache_dir/_explore/ (default: True)
+        verbose: Show live progress display. Defaults to whether stdout is a TTY,
+            so headless/CI runs stay quiet unless explicitly set.
+        save_results: Save results to CSV in cache_dir/_explore/. Defaults to the
+            WISHFUL_EXPLORE_SAVE_RESULTS env var (on unless set to "0").
 
     Returns:
         The best function, or list of functions if return_all=True
@@ -121,6 +245,10 @@ def explore(
         wishful.ExplorationError: If no variant passes the test
         ValueError: If module_path is invalid
     """
+    if verbose is None:
+        verbose = sys.stdout.isatty()
+    if save_results is None:
+        save_results = os.getenv("WISHFUL_EXPLORE_SAVE_RESULTS", "1") != "0"
     # Run the async implementation with reusable event loop
     return _run_async(
         _explore_async(
@@ -224,10 +352,24 @@ async def _explore_async(
             return _collect_all_passing(generated, module_name, function_name)
         winner = _select_best_score(generated, module_name, function_name, progress)
 
-    # Cache the winning variant as a regular wishful module
-    # So subsequent `from wishful.static.X import Y` uses the proven winner
+    # Cache the winning variant as a regular wishful module so subsequent
+    # `from wishful.static.X import Y` uses the proven winner. Re-validate under
+    # current settings right before writing — the variant was validated when it
+    # was generated, but safety could have been toggled since.
     if hasattr(winner, "__wishful_source__"):
-        write_cached(module_name, winner.__wishful_source__)
+        validate_code(winner.__wishful_source__, allow_unsafe=settings.allow_unsafe)
+        merged = _merge_into_module(
+            read_cached(module_name), function_name, winner.__wishful_source__
+        )
+        # The merge may fold in a pre-existing dangerous sibling the caller never
+        # touched. That must not sink the valid winner we promised to return —
+        # fall back to caching the winner alone if the merged module won't validate.
+        try:
+            validate_code(merged, allow_unsafe=settings.allow_unsafe)
+            write_cached(module_name, merged)
+        except SecurityError:
+            validate_code(winner.__wishful_source__, allow_unsafe=settings.allow_unsafe)
+            write_cached(module_name, winner.__wishful_source__)
 
     return winner
 
@@ -253,10 +395,22 @@ async def _generate_and_evaluate_async(
         try:
             start_time = time.perf_counter()
 
-            # Async generation with timeout
+            # Async generation with timeout. explore has no import site to
+            # discover context from, but registered @wishful.type schemas and
+            # output bindings still apply (plan R12).
+            type_schemas = get_all_type_schemas() or None
+            output_type = get_output_type_for_function(function_name)
             try:
                 source = await asyncio.wait_for(
-                    agenerate_module_code(module_name, [function_name], None),
+                    agenerate_module_code(
+                        module_name,
+                        [function_name],
+                        None,
+                        type_schemas=type_schemas,
+                        function_output_types=(
+                            {function_name: output_type} if output_type else None
+                        ),
+                    ),
                     timeout=timeout,
                 )
             except asyncio.TimeoutError:
@@ -279,23 +433,40 @@ async def _generate_and_evaluate_async(
                 continue
 
             # Attach source to function so benchmark can access it
-            fn.__wishful_source__ = source
+            fn.__wishful_source__ = source  # type: ignore[attr-defined]  # dynamic marker
 
-            # Test/benchmark
-            try:
-                passed = test is None or test(fn)
-                score = benchmark(fn) if benchmark and passed else None
-                progress.record_test_result(i, passed, score)
-                if display:
-                    display.update()
+            # Test/benchmark — user callables run on a bounded worker thread
+            # (run_user_callable) so a hanging candidate can't stall explore and
+            # a SystemExit inside one can't kill the host. Timeouts and raised
+            # BaseExceptions are recorded as variant failures; the loop continues.
+            # awaited via to_thread: run_user_callable blocks in worker.join, and
+            # this coroutine runs ON the owned loop — joining inline would stall
+            # the loop (starving concurrent explores and litellm logging) and
+            # deadlock any user test that itself calls explore().
+            if test is None:
+                passed, error = True, None
+            else:
+                ok, value, error = await asyncio.to_thread(
+                    run_user_callable, partial(test, fn), timeout
+                )
+                passed = bool(ok and value)
+                if ok and not value:
+                    error = "test returned False"
 
-                if passed:
-                    results.append((fn, source, passed, score))
+            score = None
+            if passed and benchmark:
+                ok, score, bench_error = await asyncio.to_thread(
+                    run_user_callable, partial(benchmark, fn), timeout
+                )
+                if not ok:
+                    passed, score, error = False, None, bench_error
 
-            except Exception as e:
-                progress.record_test_result(i, False, error=str(e))
-                if display:
-                    display.update()
+            progress.record_test_result(i, passed, score, error=error)
+            if display:
+                display.update()
+
+            if passed:
+                results.append((fn, source, passed, score))
 
         except Exception as e:
             progress.record_compile_error(i, str(e))
@@ -306,12 +477,9 @@ async def _generate_and_evaluate_async(
 
 
 def _compile_source(source: str, function_name: str) -> Optional[Callable]:
-    """Compile source and extract function. Returns None on failure."""
+    """Compile source and extract function via the shared execution path."""
     try:
-        validate_code(source, allow_unsafe=settings.allow_unsafe)
-        namespace: dict = {}
-        exec(compile(source, "<explore>", "exec"), namespace)
-        return namespace.get(function_name)
+        return compile_and_exec(source, function_name, filename="<explore>")
     except Exception:
         return None
 

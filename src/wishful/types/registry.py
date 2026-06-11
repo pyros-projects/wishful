@@ -7,9 +7,15 @@ that the LLM can use when generating code.
 from __future__ import annotations
 
 import inspect
+import types as _types
+from dataclasses import MISSING
 from dataclasses import fields as dataclass_fields
 from dataclasses import is_dataclass
-from typing import Any, Callable, TypeVar, get_type_hints
+from typing import Any, Callable, Type, TypeVar, Union, get_args, get_origin, get_type_hints
+
+_UNION_TYPE = getattr(_types, "UnionType", None)  # PEP 604 X | Y (3.10+)
+_NONE_TYPE = type(None)  # captured before this module shadows builtin ``type``
+_Class = type  # alias for the builtin so annotations survive the ``type`` shadow below
 
 T = TypeVar("T")
 
@@ -24,7 +30,7 @@ class TypeRegistry:
         self._function_outputs: dict[str, str] = {}
 
     def register(
-        self, type_class: type, *, output_for: str | list[str] | None = None
+        self, type_class: _Class, *, output_for: str | list[str] | None = None
     ) -> None:
         """Register a type and optionally associate it with function(s)."""
         schema = self._serialize_type(type_class)
@@ -52,7 +58,7 @@ class TypeRegistry:
         self._types.clear()
         self._function_outputs.clear()
 
-    def _serialize_type(self, type_class: type) -> str:
+    def _serialize_type(self, type_class: _Class) -> str:
         """Serialize a type to a string representation for the LLM."""
         # Check if it's a Pydantic model
         if self._is_pydantic_model(type_class):
@@ -73,7 +79,7 @@ class TypeRegistry:
             # Last resort: just return the class definition line
             return f"class {type_class.__name__}: ..."
 
-    def _is_pydantic_model(self, type_class: type) -> bool:
+    def _is_pydantic_model(self, type_class: _Class) -> bool:
         """Check if a class is a Pydantic BaseModel."""
         try:
             # Check if BaseModel is in the MRO or has model_fields
@@ -83,7 +89,7 @@ class TypeRegistry:
         except (AttributeError, TypeError):
             return False
 
-    def _serialize_pydantic(self, model_class: type) -> str:
+    def _serialize_pydantic(self, model_class: _Class) -> str:
         """Serialize a Pydantic model to source code."""
         lines = [f"class {model_class.__name__}(BaseModel):"]
 
@@ -198,7 +204,7 @@ class TypeRegistry:
         
         return ", ".join(args)
 
-    def _serialize_dataclass(self, dc_class: type) -> str:
+    def _serialize_dataclass(self, dc_class: _Class) -> str:
         """Serialize a dataclass to source code."""
         lines = ["@dataclass", f"class {dc_class.__name__}:"]
 
@@ -206,22 +212,28 @@ class TypeRegistry:
         if dc_class.__doc__:
             lines.append(f'    """{dc_class.__doc__.strip()}"""')
 
+        # Resolve string annotations (from __future__ annotations) to real types.
+        try:
+            hints = get_type_hints(dc_class)
+        except Exception:
+            hints = {}
+
         for field in dataclass_fields(dc_class):
-            annotation = self._format_annotation(field.type)
-            if field.default is not field.default_factory:  # type: ignore
-                # Has a default value
-                default_repr = repr(field.default)
-                lines.append(f"    {field.name}: {annotation} = {default_repr}")
-            elif field.default_factory is not field.default_factory:  # type: ignore
+            annotation = self._format_annotation(hints.get(field.name, field.type))
+            if field.default is not MISSING:
+                lines.append(f"    {field.name}: {annotation} = {repr(field.default)}")
+            elif field.default_factory is not MISSING:  # type: ignore[comparison-overlap]
+                factory_name = getattr(field.default_factory, "__name__", None)
+                rendered = factory_name if factory_name and factory_name != "<lambda>" else "..."
                 lines.append(
-                    f"    {field.name}: {annotation} = field(default_factory=...)"
+                    f"    {field.name}: {annotation} = field(default_factory={rendered})"
                 )
             else:
                 lines.append(f"    {field.name}: {annotation}")
 
         return "\n".join(lines)
 
-    def _is_typed_dict(self, type_class: type) -> bool:
+    def _is_typed_dict(self, type_class: _Class) -> bool:
         """Check if a class is a TypedDict."""
         try:
             return hasattr(type_class, "__annotations__") and hasattr(
@@ -230,7 +242,7 @@ class TypeRegistry:
         except AttributeError:
             return False
 
-    def _serialize_typed_dict(self, td_class: type) -> str:
+    def _serialize_typed_dict(self, td_class: _Class) -> str:
         """Serialize a TypedDict to source code."""
         lines = [f"class {td_class.__name__}(TypedDict):"]
 
@@ -244,31 +256,45 @@ class TypeRegistry:
         return "\n".join(lines)
 
     def _format_annotation(self, annotation: Any) -> str:
-        """Format a type annotation as a string."""
-        if hasattr(annotation, "__name__"):
-            return annotation.__name__
+        """Format a type annotation as a string.
 
-        # Handle typing generics
-        if hasattr(annotation, "__origin__"):
-            origin = annotation.__origin__
-            args = getattr(annotation, "__args__", ())
+        Parameterized generics (``list[str]``, ``Optional[int]``) must be checked
+        BEFORE the bare-``__name__`` shortcut: on 3.10+ ``list[str].__name__`` is
+        ``"list"``, so the shortcut would silently drop the type arguments.
+        """
+        if annotation is _NONE_TYPE:
+            return "None"
 
+        origin = get_origin(annotation)
+        if origin is not None:
+            args = get_args(annotation)
+
+            if origin is Union or (_UNION_TYPE is not None and origin is _UNION_TYPE):
+                return " | ".join(self._format_annotation(a) for a in args)
             if origin is list:
-                return (
-                    f"list[{self._format_annotation(args[0])}]" if args else "list"
-                )
-            elif origin is dict:
+                return f"list[{self._format_annotation(args[0])}]" if args else "list"
+            if origin is dict:
                 key_type = self._format_annotation(args[0]) if args else "Any"
                 val_type = self._format_annotation(args[1]) if len(args) > 1 else "Any"
                 return f"dict[{key_type}, {val_type}]"
-            elif origin is tuple:
+            if origin is tuple:
                 arg_strs = ", ".join(self._format_annotation(a) for a in args)
                 return f"tuple[{arg_strs}]"
-            # Handle Union/Optional
-            elif hasattr(origin, "__name__") and origin.__name__ == "UnionType":
-                arg_strs = " | ".join(self._format_annotation(a) for a in args)
-                return arg_strs
+            if origin is set:
+                return f"set[{self._format_annotation(args[0])}]" if args else "set"
 
+            origin_name = getattr(origin, "__name__", None) or str(origin).replace("typing.", "")
+            if args:
+                arg_strs = ", ".join(self._format_annotation(a) for a in args)
+                return f"{origin_name}[{arg_strs}]"
+            return origin_name
+
+        # NB: builtin ``type`` is shadowed by this module's ``type`` decorator,
+        # so use inspect.isclass rather than isinstance(annotation, type).
+        if inspect.isclass(annotation):
+            return annotation.__name__
+        if hasattr(annotation, "__name__"):
+            return annotation.__name__
         return str(annotation).replace("typing.", "")
 
 
@@ -277,8 +303,8 @@ _registry = TypeRegistry()
 
 
 def type(
-    cls: type[T] | None = None, *, output_for: str | list[str] | None = None
-) -> type[T] | Callable[[type[T]], type[T]]:
+    cls: Type[T] | None = None, *, output_for: str | list[str] | None = None
+) -> Type[T] | Callable[[Type[T]], Type[T]]:
     """Decorator to register a type with wishful.
 
     Usage:
@@ -300,7 +326,7 @@ def type(
             email: str
     """
 
-    def decorator(type_class: type[T]) -> type[T]:
+    def decorator(type_class: Type[T]) -> Type[T]:
         _registry.register(type_class, output_for=output_for)
         return type_class
 

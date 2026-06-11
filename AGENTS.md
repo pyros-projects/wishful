@@ -46,7 +46,7 @@ uv sync
 
 This reads `pyproject.toml` and `uv.lock`, creates a virtual env, and installs:
 
-- Runtime deps: `litellm`, `rich`, `python-dotenv`, `pydantic`
+- Runtime deps: `litellm`, `rich`, `python-dotenv`, `pydantic`, `loguru` (nest-asyncio was removed in 0.4.0: explore owns a persistent background event loop on a daemon thread instead of patching the host loop)
 - Dev deps: `pytest`, `pytest-cov`, `coverage`, `mypy`, `ruff`, `bandit`, `radon`
 
 ### Running commands (always via `uv run`)
@@ -194,26 +194,37 @@ accept/rollback state.
 
 From the root:
 
+- `docs/solutions/` — documented solutions to past problems (bugs, best practices, workflow patterns), organized by category with YAML frontmatter (`module`, `tags`, `problem_type`). Relevant when implementing or debugging in documented areas.
+- `CONCEPTS.md` — shared domain vocabulary (entities, named processes, status concepts with project-specific meaning). Relevant when orienting to the codebase or discussing domain concepts.
 - `pyproject.toml`  
   - Project metadata: name, version, description.
   - `requires-python = ">=3.12"`.
-- Runtime deps: `litellm`, `rich`, `python-dotenv`, `pydantic`
+- Runtime deps: `litellm`, `rich`, `python-dotenv`, `pydantic`, `loguru` (nest-asyncio was removed in 0.4.0: explore owns a persistent background event loop on a daemon thread instead of patching the host loop)
 - Dev deps under `[dependency-groups].dev`: `pytest`, `pytest-cov`, `coverage`, `mypy`, `ruff`, `bandit`, `radon`
   - Build system uses `uv_build` as backend.
+  - Declares a `wishful` console script via `[project.scripts]` (`wishful = "wishful.__main__:main"`).
 
 - `uv.lock`  
   - uv’s lockfile. Treat as generated; do not hand‑edit.
 
 - `src/wishful/` – main package
   - `__init__.py`  
-    - Public API: `configure`, `clear_cache`, `inspect_cache`, `regenerate`, `SecurityError`, `GenerationError`.
+    - Public API (`__all__`): `configure`, `clear_cache`, `inspect_cache`, `regenerate`, `reimport`, `set_context_radius`, `settings`, `reset_defaults`, `WishfulError`, `SecurityError`, `GenerationError`, `ExplorationError`, `EvolutionError`, `EvolutionResult`, `explore`, `evolve`.
+    - `wishful.type` (the type-registry decorator) is exposed as an attribute but **deliberately omitted from `__all__`** so `from wishful import *` does not shadow the builtin `type`.
+    - `__version__` is derived from installed package metadata (`importlib.metadata.version`), not hardcoded; falls back to `"0.0.0+unknown"` in a source checkout.
     - Installs the import finder on import (`install_finder()`), so `import wishful` activates the magic.
+  - `exceptions.py`  
+    - `WishfulError` base exception; the more specific errors (`SecurityError`, `GenerationError`, `ExplorationError`, `EvolutionError`) derive from it.
+  - `logging.py`  
+    - loguru-based logging citizenship. File logging is opt-in (`WISHFUL_LOG_TO_FILE=1`); a bare `import wishful` creates no files.
   - `__main__.py`  
-    - CLI entry point (`python -m wishful`).
-    - Provides `inspect`, `clear`, `regen` subcommands, all wired to cache and config.
+    - CLI entry point. Both the `wishful` console script and `python -m wishful` route here.
+    - Provides `inspect`, `clear`, `regen` subcommands, all wired to cache and config; each accepts `--json`. Also supports `--version`.
+    - Exit codes: `0` success, `1` runtime error, `2` usage error (argparse).
   - `config.py`  
     - Defines the `Settings` dataclass and the global `settings` instance.
-    - Reads environment variables (e.g. `DEFAULT_MODEL`, `WISHFUL_MODEL`, `WISHFUL_CACHE_DIR`, `WISHFUL_*` flags).
+    - Reads environment variables (e.g. `WISHFUL_MODEL`/`DEFAULT_MODEL`, `WISHFUL_CACHE_DIR`, `WISHFUL_REQUEST_TIMEOUT`, `WISHFUL_LOG_*`, other `WISHFUL_*` flags).
+    - Model precedence: `WISHFUL_MODEL` wins over `DEFAULT_MODEL` (the wishful-specific var takes precedence; `DEFAULT_MODEL` is only the fallback). Built-in default is `"azure/gpt-4.1"`.
     - Provides `configure(**kwargs)` and `reset_defaults()` utilities.
   - `core/` – import mechanics
     - `__init__.py` – re‑exports `MagicFinder`, `MagicLoader`, `install`.
@@ -238,13 +249,20 @@ From the root:
       - Serializes type definitions to Python code for inclusion in LLM prompts.
   - `safety/`
     - `validator.py` – `validate_code(source, allow_unsafe)` plus `SecurityError`.
-    - AST‑based checks for forbidden imports (`os`, `subprocess`, `sys`), forbidden calls (`eval`, `exec`, unsafe `open`, `os.system`, `subprocess.*`, etc.).
+    - AST checks: forbidden imports (`os`, `subprocess`, `sys`, `importlib`, `builtins`, `ctypes`); forbidden calls (`eval`, `exec`, `compile`, `__import__`); `__builtins__`/`globals()`/`vars()` gadget access; `getattr` for forbidden attributes; write-mode or non-literal-mode `open()`; attribute calls on unbound `os`/`subprocess`/`sys`/`importlib`/`ctypes` (local bindings are tracked to avoid false positives). The same scan re-runs on cache load.
+    - **Defense in depth, not a sandbox.** Generated code runs in-process; aliased/computed access can bypass a static scan (documented as `xfail` residuals in `tests/test_safety.py`). Keep validator coverage ≥90% and never weaken a rule without updating the negative/positive corpus and the README Safety Rails section.
   - `explore/` – multi-variant generation
     - `__init__.py` – exports `explore`, `ExplorationError`.
     - `explorer.py` – core `explore()` function for generating and selecting variants.
-    - `strategies.py` – selection strategies (`first_passing`, `best_score`).
     - `variant.py` – `VariantMetadata` class and metadata wrapper.
+    - `progress.py` – Rich Live progress display and CSV logging.
     - `exceptions.py` – `ExplorationError` exception.
+  - `evolve/` – generational evolution of a function
+    - `__init__.py` – exports `evolve`, `EvolutionError`.
+    - `evolver.py` – core `evolve()` loop: scores variants, feeds prior attempts/scores/failures back into each mutation round.
+    - `history.py` – evolution history tracking (per-generation summaries, attempted variants).
+    - `mutation.py` – mutation-prompt construction for the next generation.
+    - `exceptions.py` – `EvolutionError` exception.
   - `ui.py`
     - `spinner(message)` context manager using `rich` to show an optional spinner (controlled by `settings.spinner`).
 
@@ -252,25 +270,35 @@ From the root:
   - `conftest.py` – `reset_wishful` fixture:
     - Forces per‑test cache dir under `tmp_path`.
     - Disables spinner and interactive review.
-    - Sets `allow_unsafe=True` for tests, wipes modules and cache between tests.
-  - Individual test modules:
+    - Keeps safety ON by default (`allow_unsafe=False`); the few tests that need a bypass opt in via the `unsafe_settings` fixture. Wipes modules and cache between tests.
+  - Individual test modules (380+ tests; prefer `uv run pytest --collect-only -q | tail -1` over a hardcoded count to avoid drift):
     - `test_import_hook.py` – core import/loader behavior and cache semantics.
-    - `test_cli.py` – CLI argument handling and messaging.
+    - `test_cli.py` – CLI argument handling, `--json`, exit codes, and messaging.
     - `test_cache.py` – cache manager behavior.
     - `test_config.py` – config + settings semantics.
     - `test_discovery.py` – context discovery helpers.
     - `test_llm.py` – LLM client and prompt utilities.
+    - `test_logging.py` – logging citizenship (opt-in file logging, levels).
     - `test_safety.py` – security validator rules.
-    - `test_types.py` – type registry and serialization (30 tests).
-    - `test_namespaces.py` – static vs dynamic namespace behavior (6 tests).
-    - `test_explore.py` – explore() multi-variant generation (22 tests).
+    - `test_types.py` – type registry and serialization.
+    - `test_namespaces.py` – static vs dynamic namespace behavior.
+    - `test_explore.py` – explore() multi-variant generation.
+    - `test_evolve.py` – evolve() generational improvement.
+    - `test_evolve_result.py` – the EvolutionResult wrapper and compile/LLM-path contract.
+    - `test_execution.py` – the shared compile_and_exec / run_user_callable seam.
 
-- `examples/`
-  - `00_quick_start.py` through `06_omg_why.py` – basic usage patterns.
+- `examples/` (17 examples, `00`–`16`)
+  - `00_quick_start.py` through `06_omg_why.py` – basic usage patterns (`01_json_yaml`, `02_web_scraping`, `03_data_validation`, `04_format_conversion`, `05_api_client`, `06_omg_why`).
   - `07_typed_outputs.py` – demonstrates type registry with Pydantic, dataclasses, TypedDict.
   - `08_dynamic_vs_static.py` – shows difference between static (cached) and dynamic (runtime-aware) namespaces.
   - `09_context_shenanigans.py` – demonstrates context discovery and import-site hints.
+  - `10_cosmic_horror_line_by_line.py` – iterative dynamic regeneration showcase.
+  - `11_logging.py` – logging configuration and citizenship.
   - `12_explore.py` – demonstrates `wishful.explore()` for multi-variant generation.
+  - `13_explore_advanced.py` – LLM-as-judge, code golf, self-improving loops.
+  - `14_evolve.py` – generational `wishful.evolve()` (deterministic offline demo with `WISHFUL_FAKE_LLM=1`).
+  - `15_cli_and_config.py` – CLI walkthrough (`--json`, exit codes) plus `configure()`/`reset_defaults()`; LLM-free.
+  - `16_safety_and_review.py` – `SecurityError` on a planted poisoned cache file, `allow_unsafe`, TTY-gated `review=True`; LLM-free.
 
 - `docs/ideas/advanced_context_discovery.md`
   - Design/brainstorm document for richer context discovery strategies.
@@ -332,15 +360,19 @@ Configuration is centralized in `src/wishful/config.py` via the `Settings` datac
 
 ### Settings fields
 
-- `model: str` – LLM model identifier (default from `DEFAULT_MODEL` / `WISHFUL_MODEL` or `"azure/gpt-4.1"`).
+- `model: str` – LLM model identifier (default: `WISHFUL_MODEL` if set, else `DEFAULT_MODEL`, else `"azure/gpt-4.1"`; `WISHFUL_MODEL` takes precedence).
 - `cache_dir: Path` – where generated modules are stored (default `.wishful` in CWD).
 - `review: bool` – whether to prompt for manual review before executing generated code.
-- `debug: bool` – enable verbose logging (currently a simple flag used where needed).
+- `debug: bool` – enable verbose logging (sets `log_level` to DEBUG and file logging on unless overridden).
 - `allow_unsafe: bool` – bypass safety checks when `True`.
 - `spinner: bool` – enable/disable the rich spinner UI.
-- `max_tokens: int` – upper bound for LLM response tokens.
-- `temperature: float` – LLM sampling temperature.
-- (Context discovery radius is configured separately via `wishful.set_context_radius(n)` or `WISHFUL_CONTEXT_RADIUS`; it is not a `Settings` field.)
+- `max_tokens: int` – upper bound for LLM response tokens (default 16384).
+- `temperature: float` – LLM sampling temperature (default 1.0).
+- `system_prompt: str` – system prompt sent to the LLM (default from `WISHFUL_SYSTEM_PROMPT` or a built-in template).
+- `log_level: str` – logging level, uppercased (default `"WARNING"`, from `WISHFUL_LOG_LEVEL`).
+- `log_to_file: bool` – write logs to `{cache_dir}/_logs/`. **Default `False` (opt-in)** via `WISHFUL_LOG_TO_FILE=1`; a bare `import wishful` creates no files.
+- `request_timeout: float` – per-request LLM timeout in seconds (default 300, from `WISHFUL_REQUEST_TIMEOUT`).
+- `context_radius` (env `WISHFUL_CONTEXT_RADIUS`, default `3`): lines of surrounding code captured per direction at the import site. A regular `Settings` field since 0.4.0 — `configure(context_radius=...)` and `reset_defaults()` aware; `wishful.set_context_radius(n)` is a thin wrapper.
 
 Use `wishful.configure(...)` at runtime to change these values programmatically:
 
@@ -364,7 +396,7 @@ Loaded via `python-dotenv` (`load_dotenv()` at module import). Relevant variable
 - LLM routing (through litellm):
   - `OPENAI_API_KEY`, `DEFAULT_MODEL`, etc., _or_ provider‑specific vars like:
     - `AZURE_API_KEY`, `AZURE_API_BASE`, `AZURE_API_VERSION`, `DEFAULT_MODEL`.
-  - `WISHFUL_MODEL` – alternative way to set `settings.model`.
+  - `WISHFUL_MODEL` – sets `settings.model` and **takes precedence over** `DEFAULT_MODEL` (which is only the fallback).
 - Wishful behavior:
   - `WISHFUL_CACHE_DIR` – override cache directory path.
   - `WISHFUL_REVIEW` – `"1"` enables review mode.
@@ -373,6 +405,10 @@ Loaded via `python-dotenv` (`load_dotenv()` at module import). Relevant variable
 - `WISHFUL_SPINNER` – `"0"` disables the spinner.
 - `WISHFUL_MAX_TOKENS` – integer.
 - `WISHFUL_TEMPERATURE` – float.
+- `WISHFUL_REQUEST_TIMEOUT` – float; per-request LLM timeout in seconds (default 300).
+- `WISHFUL_LOG_LEVEL` – logging level (DEBUG, INFO, WARNING, ERROR; default WARNING).
+- `WISHFUL_LOG_TO_FILE` – file logging is **off by default**; set to `"1"` to enable.
+- `WISHFUL_SYSTEM_PROMPT` – override the system prompt.
 - `WISHFUL_CONTEXT_RADIUS` – integer; number of lines before/after import lines and call sites to include in context (default 3).
 - `WISHFUL_FAKE_LLM` – `"1"` enables fake, deterministic generation (no network).
 
@@ -464,7 +500,7 @@ The LLM will respect both Field constraints (min_length=10, gt=0) AND the docstr
 - Type schemas are passed to `generate_module_code()` as `type_schemas` and `function_output_types`
 - **Docstrings influence LLM behavior**: The docstring text (e.g., "Project plan written by master yoda from star wars") is included in the serialized type definition and affects how the LLM generates content (tone, style, domain-specific language)
 - See `examples/07_typed_outputs.py` for comprehensive usage examples
-- See `tests/test_types.py` for 30 tests covering all scenarios
+- See `tests/test_types.py` for tests covering all scenarios
 
 ---
 
@@ -610,8 +646,7 @@ When `save_results=True` (default), results are saved to `cache_dir/_explore/`:
 ```
 src/wishful/explore/
 ├── __init__.py      # Public API: explore, ExplorationError
-├── explorer.py      # Core explore() - async internally, sync API
-├── strategies.py    # Selection strategies (first_passing, best_score)
+├── explorer.py      # Core explore() - async internally, sync API; selection strategies (first_passing, fastest, best_score)
 ├── variant.py       # VariantMetadata and wrapper
 ├── exceptions.py    # ExplorationError
 └── progress.py      # Rich Live progress display and CSV logging
@@ -625,7 +660,7 @@ src/wishful/explore/
 - **Conditional Score column**: The Rich display hides the Score column when no benchmark is provided.
 
 - See `examples/12_explore.py` for comprehensive usage examples
-- See `tests/test_explore.py` for 22 tests covering all scenarios
+- See `tests/test_explore.py` for tests covering all scenarios
 
 ---
 
@@ -650,16 +685,19 @@ The top‑level public API in `wishful.__init__` re‑exports high‑level cache
 - `wishful.inspect_cache()`
 - `wishful.regenerate(module_name)` – defaults to static namespace if no prefix given
 
-### CLI (`python -m wishful`)
+### CLI (`wishful` / `python -m wishful`)
 
-Via `src/wishful/__main__.py`:
+Via `src/wishful/__main__.py`. The `wishful` console script (`[project.scripts]`) and `python -m wishful` are equivalent entry points; both call `main()`.
 
-- `python -m wishful` – prints help and usage.
-- `python -m wishful inspect` – shows current cached modules under `settings.cache_dir`.
-- `python -m wishful clear` – clears the cache directory.
-- `python -m wishful regen wishful.static.text` – deletes cache for the given module so it is regenerated on next import.
+- `wishful` (no args) – prints help and usage.
+- `wishful inspect` – shows current cached modules under `settings.cache_dir`.
+- `wishful clear` – clears the cache directory.
+- `wishful regen wishful.static.text` – deletes cache for the given module so it is regenerated on next import (a bare name like `text` maps into the static namespace).
+- `wishful --version` – prints `wishful.__version__`.
+- Every subcommand accepts `--json` for machine-readable output.
+- Exit codes: `0` success, `1` runtime error (e.g. invalid module name), `2` usage error (argparse).
 
-From this repo, always invoke via uv:
+From this repo, always invoke via uv (the console script also works once synced):
 
 ```bash
 uv run python -m wishful inspect

@@ -1,0 +1,23 @@
+{
+  "model": "openai/gpt-5.5",
+  "litellm_locked": "1.80.0",
+  "proof_dir": "/tmp/compound-engineering/ce-code-review/20260611-023408-d3974d10/smoke",
+  "results": [
+    {"example": "00_quick_start.py", "status": "fail", "exit": 1, "secs": 175, "note": "GenerationError: LLM returned empty content (static import via _dynamic_getattr)"},
+    {"example": "01_json_yaml.py", "status": "pass"},
+    {"example": "02_web_scraping.py", "status": "pass"},
+    {"example": "03_data_validation.py", "status": "pass"},
+    {"example": "04_format_conversion.py", "status": "pass"},
+    {"example": "05_api_client.py", "status": "pass"},
+    {"example": "06_omg_why.py", "status": "pass"},
+    {"example": "07_typed_outputs.py", "status": "pass"},
+    {"example": "08_dynamic_vs_static.py", "status": "fail", "exit": 1, "secs": 242, "note": "1st run: 240s timeout mid dynamic regen; retry: empty content on 2nd dynamic call"},
+    {"example": "09_context_shenanigans.py", "status": "fail", "exit": 1, "secs": 90, "note": "empty content on dynamic import"},
+    {"example": "10_cosmic_horror_line_by_line.py", "status": "fail", "exit": 1, "secs": 150, "note": "empty content on dynamic import"},
+    {"example": "11_logging.py", "status": "pass", "secs": 81},
+    {"example": "12_explore.py", "status": "pass", "secs": 306},
+    {"example": "13_explore_advanced.py", "status": "fail", "exit": 1, "secs": 216, "note": "ExplorationError: no valid variants (LLM-as-judge example)"},
+    {"example": "14_evolve.py", "status": "pass", "secs": 32}
+  ],
+  "passed": 10, "failed": 5
+}

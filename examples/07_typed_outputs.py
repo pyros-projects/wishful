@@ -188,8 +188,8 @@ def example_pydantic():
 
     result = project_plan_generator(idea="sudoku web app")
     print(f"{result}")
-    print(f"\nNote: The docstring makes the LLM write in Yoda-speak!")
-    print(f"And min_length=10 ensures at least 10 milestones.")
+    print("\nNote: The docstring makes the LLM write in Yoda-speak!")
+    print("And min_length=10 ensures at least 10 milestones.")
 
 
 def main():

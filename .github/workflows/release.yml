@@ -1,0 +1,89 @@
+name: Release
+
+# Releases are deliberate: they happen on a version tag, never on a branch
+# push. (The previous publish.yml released on every main push that touched
+# pyproject.toml — with the bump-every-commit convention, that would have
+# published every merged PR.)
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: read
+
+env:
+  WISHFUL_FAKE_LLM: "1"
+  WISHFUL_LOG_TO_FILE: "0"
+
+jobs:
+  verify:
+    name: Full gate at the tag
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - name: Sync dependencies
+        run: uv sync --frozen
+
+      - name: Tag matches package version
+        run: |
+          PKG_VERSION=$(uv run python -c "import tomllib; print(tomllib.load(open('pyproject.toml','rb'))['project']['version'])")
+          TAG_VERSION="${GITHUB_REF_NAME#v}"
+          if [ "$PKG_VERSION" != "$TAG_VERSION" ]; then
+            echo "::error::Tag $GITHUB_REF_NAME does not match pyproject version $PKG_VERSION"
+            exit 1
+          fi
+
+      - name: Lint + types + security scan
+        run: |
+          uv run ruff check .
+          uv run mypy src/wishful
+          uv run bandit -c pyproject.toml -r src/wishful -q
+
+      - name: Tests with coverage gate
+        run: uv run pytest -q --cov=wishful --cov-report=term-missing
+
+  publish:
+    name: Build and publish
+    needs: verify
+    runs-on: ubuntu-latest
+    environment: pypi
+    permissions:
+      contents: write   # create the GitHub release
+      id-token: write   # PyPI trusted publishing (OIDC)
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - name: Build
+        run: uv build
+
+      - name: Install wheel into a clean env and import
+        run: |
+          uv venv /tmp/release-venv
+          uv pip install --python /tmp/release-venv/bin/python dist/*.whl
+          /tmp/release-venv/bin/python -c "import wishful; print(f'wishful {wishful.__version__} imports cleanly')"
+
+      # Uses PyPI trusted publishing (OIDC) — configure the publisher once on
+      # PyPI (project settings -> publishing -> add GitHub publisher for this
+      # repo/workflow/environment). Falls back to PYPI_API_TOKEN if set.
+      - name: Publish to PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          password: ${{ secrets.PYPI_API_TOKEN }}
+
+      - name: Create GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" dist/* \
+            --title "wishful $GITHUB_REF_NAME" \
+            --generate-notes \
+            --verify-tag

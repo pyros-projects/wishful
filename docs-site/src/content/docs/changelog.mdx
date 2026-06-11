@@ -5,6 +5,84 @@ description: Notable changes to wishful.
 
 All notable changes to wishful will be documented here. Follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) and [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.4.0] - 2026-06-11
+
+### Changed
+
+- **`evolve()` now returns an `EvolutionResult`** instead of the bare winner function: callable like the winner (delegates `__call__`), proxies `__name__`/`__doc__`/`__wishful_source__`/`__wishful_evolution__`, sets `__wrapped__` for `inspect.signature()`, and carries the run's `history` and `best_score`. Code doing `isinstance(result, types.FunctionType)` must use `result.fn` instead. Exported as `wishful.EvolutionResult`.
+- **`__wishful_evolution__` gained a `schema_version` key** (int, currently `1`); treat unknown keys as forward-compatible additions.
+- **`wishful.settings.cache_dir` is now always an absolute path**, resolved at construction — `os.chdir()` can no longer silently move the cache. Comparisons against relative `Path` literals will no longer match.
+- **Dynamic modules are lazy**: attribute access returns a call wrapper without an LLM call (so `hasattr()` is always `True` for public names); generation happens only when the wrapper is invoked. Dynamic modules expose functions only — constants raise `AttributeError` at call time.
+- **explore() owns its event loop**: one persistent background loop on a wishful-owned daemon thread replaces the cached-loop + `nest_asyncio` design. `explore()` now works inside a running loop (Jupyter) without patching the host, including from a `test`/`benchmark` callable that itself calls `explore()`.
+- **`explore(verbose=...)` defaults to `sys.stdout.isatty()`** and `save_results` to the `WISHFUL_EXPLORE_SAVE_RESULTS` env var (on unless `"0"`), so headless runs stay quiet by default.
+
+### Added
+
+- **`context_radius` setting** (env `WISHFUL_CONTEXT_RADIUS`, default `3`): the import-site context capture radius is now a regular `Settings` field — `configure(context_radius=...)` and `reset_defaults()` aware; `set_context_radius()` is a thin wrapper.
+- **Nested wishes are rejected up front**: `import wishful.static.a.b` raises a clear `ImportError` (wish names are single-level) before any LLM call, instead of generating the parent and failing with "'…' is not a package".
+- **explore/evolve candidate containment**: user `test`/`benchmark`/`fitness` callables run on a bounded worker with a per-variant timeout; a hanging or `sys.exit()`-ing candidate is recorded as a variant failure instead of stalling the run or killing the host. `ExplorationError.failures` now carries full, untruncated failure text.
+- **`@wishful.type` schemas reach `explore()`**: registered type schemas and `output_for` bindings are included in explore's generation prompts.
+
+### Dependencies
+
+- **Removed `nest-asyncio`** — no longer needed with the owned event loop. Projects that imported it transitively through wishful must add it as a direct dependency.
+
+## [0.3.0] - 2026-06-11
+
+> **Note:** 0.3.0 was an internal milestone and was never published; its changes first ship publicly together with 0.4.0.
+
+### Added
+
+#### 🧬 Evolve
+- **`wishful.evolve()`**: generational improvement of a function — keeps a history of prior attempts, scores, and failures, then feeds that history into the next mutation prompt. Returns a function carrying `__wishful_source__` and `__wishful_evolution__`. New `EvolutionError`.
+
+#### 🖥️ CLI
+- **Real `wishful` console script** (`[project.scripts]`) alongside `python -m wishful`; both are equivalent entry points.
+- **`--json`** output on every subcommand for machine-readable results.
+- **`--version`** flag.
+- **Documented exit codes**: `0` success, `1` runtime error, `2` usage error.
+
+#### ⚙️ Configuration
+- **`request_timeout`** setting (env `WISHFUL_REQUEST_TIMEOUT`, default `300`s): per-request LLM timeout, applied at import time, with an empty-content retry.
+- **Model precedence clarified**: `WISHFUL_MODEL` now takes precedence over `DEFAULT_MODEL` (the wishful-specific var wins; `DEFAULT_MODEL` is the fallback). Built-in default remains `"azure/gpt-4.1"`.
+
+#### 🪵 Logging citizenship
+- **`log_to_file` now defaults to `False`** (opt-in via `WISHFUL_LOG_TO_FILE=1`): a bare `import wishful` no longer creates files in your CWD.
+- loguru-based logging with `log_level` control.
+
+#### 🧱 Errors
+- **`WishfulError` base exception**: `SecurityError`, `GenerationError`, `ExplorationError`, and `EvolutionError` now derive from it.
+
+### Changed
+
+#### 🛡️ Security / Validator
+- Hardened safety validator, framed honestly as **"defense in depth, not a sandbox"**: AST scan blocks forbidden imports/calls, `__builtins__`/`globals()`/`vars()`/`locals()` gadget access, introspection escape chains (`__subclasses__`/`__globals__`/`__code__`/`__bases__`), aliased dangerous builtins (`f = open`), write-mode (or non-literal-mode) `open()`, and system calls on unbound modules. The same scan re-runs on cache load, so tampered `.wishful/` files are re-checked. Only genuinely *computed* access (runtime-built attribute names, `globals().get(...)`) remains a documented residual.
+
+#### 🗄️ Cache
+- **Namespace isolation**: `static` and `dynamic` modules now map to **separate** cache files (`<cache>/<name>.py` vs `<cache>/_dynamic/<name>.py`) — they previously collided, so a regenerate or review-rejection on one namespace could clobber the other. Cached sources are re-validated on load, and writes are atomic (temp file + rename).
+
+#### 🔍 Review gate
+- **Review-gate ordering + headless guard**: review happens before execution on every path, with a guard for non-interactive environments (fails closed, stays usable in notebooks).
+
+#### 🎨 Type Registry
+- Type-registry fixes for serialization and output-type binding (parameterized generics like `list[str]` are preserved; `default_factory` fields serialize correctly).
+
+#### 📦 Versioning
+- **`__version__` now derives from installed package metadata** (`importlib.metadata.version`) instead of being hardcoded.
+
+### Breaking changes
+- **`max_tokens` default raised `4096` → `16384`**: reasoning models (e.g. gpt-5.5) spend part of the budget on hidden reasoning tokens, so the old cap produced empty or truncated output.
+- **`evolve(verbose=...)` removed**: the parameter was accepted but never used; passing it now raises `TypeError`.
+- **`log_to_file` defaults to `False`** (was `True`).
+- **`WISHFUL_MODEL` takes precedence over `DEFAULT_MODEL`** (was the reverse).
+
+### Dependencies
+- Refreshed: `litellm` (≥1.83.14, for day-0 gpt-5.5 support), `rich`, `python-dotenv`, `pydantic`.
+- Added `loguru` and `nest-asyncio`.
+- Removed `pyglove` (was unused).
+
+---
+
 ## [0.2.0] - 2024-11-24
 
 ### Added
@@ -93,5 +171,6 @@ All notable changes to wishful will be documented here. Follows [Keep a Changelo
 
 ---
 
+[0.3.0]: https://github.com/pyros-projects/wishful/compare/v0.2.4...v0.3.0
 [0.2.0]: https://github.com/pyros-projects/wishful/compare/v0.1.6...v0.2.0
 [0.1.6]: https://github.com/pyros-projects/wishful/releases/tag/v0.1.6

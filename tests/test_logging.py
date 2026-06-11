@@ -1,7 +1,11 @@
 from pathlib import Path
 
+from loguru import logger as loguru_logger
+
 import wishful
+from wishful import logging as wl
 from wishful.cache.manager import dynamic_snapshot_path
+from wishful.logging import configure_logging
 
 
 def _latest_log(cache_dir: Path) -> Path | None:
@@ -10,6 +14,41 @@ def _latest_log(cache_dir: Path) -> Path | None:
         return None
     logs = sorted(log_dir.glob("*.log"))
     return logs[-1] if logs else None
+
+
+def _capture_log_call(**configure_kwargs) -> str:
+    from wishful.llm import client
+
+    records: list[str] = []
+    sink_id = loguru_logger.add(lambda m: records.append(str(m)), level="DEBUG")
+    try:
+        wishful.configure(**configure_kwargs)
+        client._log_llm_call(
+            "wishful.static.x",
+            "static",
+            ["f"],
+            "SECRET_CONTEXT_sk-abc123",
+            None,
+            None,
+            [{"role": "user", "content": "SECRET_PROMPT_sk-abc123"}],
+        )
+        return "".join(records)
+    finally:
+        loguru_logger.remove(sink_id)
+        wishful.configure(log_prompts=False)
+
+
+def test_prompt_bodies_redacted_by_default():
+    text = _capture_log_call(log_prompts=False)
+    assert "SECRET_CONTEXT" not in text
+    assert "SECRET_PROMPT" not in text
+    assert "redacted" in text
+
+
+def test_prompt_bodies_logged_when_opted_in():
+    text = _capture_log_call(log_prompts=True)
+    assert "SECRET_CONTEXT" in text
+    assert "SECRET_PROMPT" in text
 
 
 def test_logging_creates_file_and_records_generation(monkeypatch):
@@ -58,4 +97,92 @@ def test_logging_records_syntax_retry(monkeypatch):
 
     log_path = _latest_log(wishful.settings.cache_dir)
     assert log_path and log_path.exists()
-    assert "SyntaxError while loading wishful.dynamic.logsyntax" in log_path.read_text()
+    # With safety on (the shipped default), a malformed generation is caught at
+    # validation time and the retry is logged here, before exec.
+    assert (
+        "wishful.dynamic.logsyntax has invalid syntax; regenerating once"
+        in log_path.read_text()
+    )
+
+
+# --- U10: logging citizenship ------------------------------------------------
+
+
+def test_configure_logging_preserves_host_sinks():
+    """Importing/reconfiguring wishful must not delete a host app's loguru sink."""
+    received = []
+    host_id = loguru_logger.add(
+        lambda m: received.append(m.record["message"]), level="DEBUG"
+    )
+    try:
+        configure_logging(force=True)  # wishful reconfigures only its own sinks
+        loguru_logger.info("host message after wishful reconfigure")
+        assert any("host message" in r for r in received)
+    finally:
+        loguru_logger.remove(host_id)
+
+
+def test_log_to_file_off_creates_no_files(tmp_path):
+    fresh = tmp_path / "fresh_cache"
+    wishful.configure(cache_dir=fresh, debug=False, log_to_file=False, log_level="WARNING")
+    configure_logging(force=True)
+    assert not (fresh / "_logs").exists()
+
+
+def test_log_to_file_opt_in_creates_log(tmp_path):
+    fresh = tmp_path / "optin_cache"
+    wishful.configure(cache_dir=fresh, log_to_file=True, log_level="INFO")
+    configure_logging(force=True)
+    loguru_logger.info("hello file")
+    log_dir = fresh / "_logs"
+    assert log_dir.exists()
+    assert list(log_dir.glob("*.log"))
+
+
+def test_import_does_not_double_print_or_leak_debug(tmp_path):
+    """A fresh `import wishful` must leave loguru with a single console sink.
+
+    Before this fix wishful added its Rich sink but left loguru's default sink 0
+    in place, so every record printed twice (loguru default stderr + wishful's
+    Rich stdout) and wishful's own DEBUG internals leaked to the host's stderr
+    even at the default WARNING level.
+    """
+    import os
+    import subprocess
+    import sys
+    import textwrap
+
+    code = textwrap.dedent(
+        """
+        import wishful  # noqa: F401  (configures logging at import)
+        from loguru import logger
+        logger.debug("DEBUG_SENTINEL")
+        logger.warning("WARN_SENTINEL")
+        """
+    )
+    env = {**os.environ, "WISHFUL_FAKE_LLM": "1"}
+    for var in ("WISHFUL_DEBUG", "WISHFUL_LOG_LEVEL"):
+        env.pop(var, None)  # exercise the shipped default (WARNING, no debug)
+
+    result = subprocess.run(
+        [sys.executable, "-c", code],
+        capture_output=True,
+        text=True,
+        cwd=tmp_path,
+        env=env,
+    )
+    combined = result.stdout + result.stderr
+    assert combined.count("WARN_SENTINEL") == 1, combined  # not double-printed
+    assert "DEBUG_SENTINEL" not in combined, combined       # no debug leak at WARNING
+
+
+def test_log_to_file_readonly_degrades_gracefully(tmp_path, monkeypatch):
+    monkeypatch.setattr(wl, "_file_log_warned", False)
+
+    def boom(*args, **kwargs):
+        raise OSError("read-only filesystem")
+
+    monkeypatch.setattr("pathlib.Path.mkdir", boom)
+    wishful.configure(cache_dir=tmp_path / "ro_cache", log_to_file=True)
+    # Must not raise even though the log directory cannot be created.
+    configure_logging(force=True)

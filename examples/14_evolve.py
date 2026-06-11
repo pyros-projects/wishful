@@ -98,7 +98,12 @@ def main() -> None:
         generations=1,
         variants=2,
         mutation_prompt="Keep the behavior identical but make the code concise.",
-        verbose=False,
+        # AlphaEvolve's key trick: prior attempts (with their scores and
+        # failures) ride along in the mutation prompt, so the model learns
+        # what worked. keep_history=False turns that off; history_limit caps
+        # how many past attempts each mutation sees.
+        keep_history=True,
+        history_limit=5,
     )
 
     print("Original fitness:", source_quality(normalize_scores))
@@ -107,6 +112,33 @@ def main() -> None:
     print("Result:", evolved([10, 20, 30]))
     print("\nWinning source:\n")
     print(evolved.__wishful_source__)
+
+    # evolve() returns an EvolutionResult: callable like the winner, with the
+    # run's evidence attached.
+    print("Best score:", evolved.best_score)
+    print("Variants tried:", evolved.history.total_variants_tried)
+
+    demo_evolution_error()
+
+
+def demo_evolution_error() -> None:
+    """When no variant ever passes the test, evolve raises EvolutionError."""
+
+    def impossible(fn) -> bool:
+        return False  # nothing can satisfy this gate
+
+    try:
+        wishful.evolve(
+            normalize_scores,
+            fitness=source_quality,
+            test=impossible,
+            generations=1,
+            variants=2,
+        )
+    except wishful.EvolutionError as exc:
+        print("\nCaught EvolutionError (as expected):")
+        print("  generations completed:", exc.generations_completed)
+        print("  total attempts:", exc.total_attempts)
 
 
 if __name__ == "__main__":

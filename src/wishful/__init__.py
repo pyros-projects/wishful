@@ -4,13 +4,17 @@ from __future__ import annotations
 
 import importlib
 import sys
+from importlib.metadata import PackageNotFoundError
+from importlib.metadata import version as _pkg_version
+from types import ModuleType
 from typing import List
 
-from wishful.cache import manager as cache
+from wishful.cache import manager as _cache
 from wishful.config import configure, reset_defaults, settings
 from wishful.core.discovery import set_context_radius as _set_context_radius
 from wishful.core.finder import install as install_finder
-from wishful.evolve import EvolutionError, evolve
+from wishful.evolve import EvolutionError, EvolutionResult, evolve
+from wishful.exceptions import WishfulError
 from wishful.explore import ExplorationError, explore
 from wishful.llm.client import GenerationError
 from wishful.safety.validator import SecurityError
@@ -19,6 +23,8 @@ from wishful.types import type as type_decorator
 # Install on import so `import magic.xyz` is intercepted immediately.
 install_finder()
 
+# Note: `type` is intentionally omitted from __all__ so `from wishful import *`
+# does not shadow the builtin. Access it as `wishful.type`.
 __all__ = [
     "configure",
     "clear_cache",
@@ -28,23 +34,24 @@ __all__ = [
     "set_context_radius",
     "settings",
     "reset_defaults",
+    "WishfulError",
     "SecurityError",
     "GenerationError",
     "ExplorationError",
     "EvolutionError",
+    "EvolutionResult",
     "explore",
     "evolve",
-    "type",
 ]
 
-# Alias for cleaner API
+# Alias for cleaner API (wishful.type); deliberately not exported via __all__.
 type = type_decorator
 
 
 def clear_cache() -> None:
     """Delete all generated files from the cache directory."""
 
-    cache.clear_cache()
+    _cache.clear_cache()
     # Remove generated namespaces so they regenerate on next import.
     for name in list(sys.modules):
         if name.startswith("wishful.static") or name.startswith("wishful.dynamic"):
@@ -55,7 +62,7 @@ def clear_cache() -> None:
 def inspect_cache() -> List[str]:
     """Return a list of cached module file paths as strings."""
 
-    return [str(p) for p in cache.inspect_cache()]
+    return [str(p) for p in _cache.inspect_cache()]
 
 
 def regenerate(module_name: str) -> None:
@@ -69,7 +76,7 @@ def regenerate(module_name: str) -> None:
         # Default to static namespace for backward compatibility
         module_name = f"wishful.static.{module_name}"
 
-    cache.delete_cached(module_name)
+    _cache.delete_cached(module_name)
     sys.modules.pop(module_name, None)
     importlib.invalidate_caches()
 
@@ -79,7 +86,7 @@ def set_context_radius(radius: int) -> None:
     _set_context_radius(radius)
 
 
-def reimport(module_path: str):
+def reimport(module_path: str) -> ModuleType:
     """Force a fresh import by clearing the module from cache.
 
     This is especially useful for wishful.dynamic.* imports in loops,
@@ -102,4 +109,7 @@ def reimport(module_path: str):
     return importlib.import_module(module_path)
 
 
-__version__ = "0.1.0"
+try:
+    __version__ = _pkg_version("wishful")
+except PackageNotFoundError:  # pragma: no cover - source checkout without install
+    __version__ = "0.0.0+unknown"

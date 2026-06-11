@@ -1,0 +1,48 @@
+
+=================================
+Example: extract emails from text
+=================================
+
+
+['team@example.com', 'sales@demo.dev']
+
+========================
+Example: normalize dates
+========================
+
+
+2025-12-31
+2025-12-25
+
+=============================================
+Example: nginx log parser with inline context
+=============================================
+
+
+[{'ip': '127.0.0.1', 'remote_addr': '127.0.0.1', 'ident': None, 'remote_ident': None, 'user': None, 'remote_user': None, 'timestamp': '10/Oct/2025:13:55:36 +0000', 'time_local': '10/Oct/2025:13:55:36 +0000', 'datetime': datetime.datetime(2025, 10, 10, 13, 55, 36, tzinfo=datetime.timezone.utc), 'time': datetime.datetime(2025, 10, 10, 13, 55, 36, tzinfo=datetime.timezone.utc), 'request': 'GET /index.html HTTP/1.1', 'method': 'GET', 'path': '/index.html', 'protocol': 'HTTP/1.1', 'status': 200, 'bytes': 2326, 'body_bytes_sent': 2326, 'referrer': None, 'referer': None, 'http_referer': '-', 'user_agent': 'curl/7.81.0', 'http_user_agent': 'curl/7.81.0', 'raw': '127.0.0.1 - - [10/Oct/2025:13:55:36 +0000] "GET /index.html HTTP/1.1" 200 2326 "-" "curl/7.81.0"'}]
+
+======================================
+Example: read README and count headers
+======================================
+
+
+Traceback (most recent call last):
+  File "/home/pyro/projects/private/wishful/examples/00_quick_start.py", line 93, in <module>
+    main()
+  File "/home/pyro/projects/private/wishful/examples/00_quick_start.py", line 86, in main
+    example_read_README()
+  File "/home/pyro/projects/private/wishful/examples/00_quick_start.py", line 47, in example_read_README
+    from wishful.static.text import count_headers
+  File "/home/pyro/projects/private/wishful/src/wishful/core/loader.py", line 184, in _dynamic_getattr
+    source, path = self._generate_and_cache(desired, ctx)
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/pyro/projects/private/wishful/src/wishful/core/loader.py", line 123, in _generate_and_cache
+    source = gen_fn(
+             ^^^^^^^
+  File "/home/pyro/projects/private/wishful/src/wishful/llm/client.py", line 46, in generate_module_code
+    content = _extract_content(response)
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/pyro/projects/private/wishful/src/wishful/llm/client.py", line 164, in _extract_content
+    raise GenerationError("LLM returned empty content")
+wishful.llm.client.GenerationError: LLM returned empty content
+EXIT=1 SECS=175

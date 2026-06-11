@@ -1,0 +1,13 @@
+Original fitness: 689.0
+Evolved fitness: 812.0
+Improvement: +17.9%
+Result: [0.0, 0.5, 1.0]
+
+Winning source:
+
+def normalize_scores(values):
+    v = list(map(float, values))
+    if not v:
+        return []
+    lo, hi = min(v), max(v)
+    return [0.0 if hi == lo else (x - lo) / (hi - lo) for x in v]

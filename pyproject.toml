@@ -1,6 +1,6 @@
 [project]
 name = "wishful"
-version = "0.2.4"
+version = "0.4.0"
 description = "Wishful thinking for Python"
 readme = "README.md"
 authors = [
@@ -8,25 +8,55 @@ authors = [
 ]
 requires-python = ">=3.12"
 dependencies = [
-    "litellm>=1.40.0",
-    "rich>=13.7.0",
+    "litellm>=1.83.14",
+    "rich>=14.0.0",
     "python-dotenv>=1.0.1",
     "pydantic>=2.12.4",
     "loguru>=0.7.3",
-    "pyglove>=0.4.5",
 ]
 
+[project.scripts]
+wishful = "wishful.__main__:main"
+
+[tool.ruff.lint.per-file-ignores]
+# Examples deliberately import wishful.* mid-file — that import IS the demo.
+"examples/*" = ["E402"]
+
+[tool.pytest.ini_options]
+markers = [
+    "smoke: real-model smoke test, run only with WISHFUL_SMOKE=1 and credentials",
+]
+
+[tool.bandit]
+# B102 (exec_used): executing LLM-generated code IS this library's product;
+# the exec sites are gated by the validator + review gate (see safety docs).
+# B110 (try_except_pass): the config->logging fallback chain is deliberate.
+skips = ["B102", "B110"]
+
+[tool.mypy]
+python_version = "3.12"
+
+[tool.coverage.run]
+source = ["wishful"]
+# Generated cache modules are exec'd from temp dirs during tests; don't try to
+# measure or report on them.
+omit = ["*/.wishful/*", "*/_dynamic/*"]
+
+[tool.coverage.report]
+# Floor with headroom below the current ~86%; guards against large regressions.
+fail_under = 80
+
 [build-system]
-requires = ["uv_build>=0.9.1,<0.10.0"]
+requires = ["uv_build>=0.11.0,<1.0.0"]
 build-backend = "uv_build"
 
 [dependency-groups]
 dev = [
     "bandit>=1.9.1",
     "coverage>=7.12.0",
-    "mypy>=1.18.2",
+    "mypy>=2.1",
     "pytest>=9.0.1",
     "pytest-cov>=7.0.0",
     "radon>=6.0.1",
-    "ruff>=0.14.6",
+    "ruff>=0.15.0",
 ]

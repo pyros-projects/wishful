@@ -11,7 +11,11 @@ from wishful.llm.client import generate_module_code
 
 
 def mutate_with_llm(
-    source: str, mutation_prompt: str, function_name: str, history: List[dict]
+    source: str,
+    mutation_prompt: str,
+    function_name: str,
+    history: List[dict],
+    timeout: float | None = None,
 ) -> str:
     """
     Ask the LLM to create a mutation informed by evolutionary history.
@@ -32,9 +36,17 @@ def mutate_with_llm(
     """
     context = _build_evolution_context(source, mutation_prompt, function_name, history)
 
-    # Use existing LLM infrastructure
+    # DECIDED (review #48): evolve stays on the SYNC LLM path while explore is
+    # async. evolve's parallelism comes from run_user_callable worker threads
+    # with a per-variant timeout that this sync call honors via `timeout`;
+    # routing through explore's owned event loop would add cross-thread future
+    # plumbing for zero throughput gain until async evolve (explicitly deferred
+    # in plan 002) lands. Pinned by test_mutation_uses_sync_llm_path.
     return generate_module_code(
-        module="wishful.evolve._mutation", functions=[function_name], context=context
+        module="wishful.evolve._mutation",
+        functions=[function_name],
+        context=context,
+        timeout=timeout,
     )
 
 

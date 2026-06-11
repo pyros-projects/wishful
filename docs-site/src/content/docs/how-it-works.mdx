@@ -50,6 +50,21 @@ print(programming_joke())  # Fresh generation
 **Why?** Dynamic modules use `DynamicProxyModule` which wraps callables. Each **function call** on the module triggers `_call_with_runtime()` to regenerate with fresh context. But `from ... import func` binds `func` to your namespace once—no regeneration happens on subsequent calls.
 :::
 
+#### The dynamic attribute contract
+
+Attribute access on a dynamic module is **lazy and free**: it returns a callable
+wrapper without spending an LLM call. Generation happens only when you *invoke*
+the wrapper. Three consequences are intentional:
+
+- `hasattr(mod, name)` is `True` for every public name — the module can't know
+  what the model would generate without paying for a generation, so it doesn't try.
+- `dir(mod)` only lists what previous generations produced, not what's possible.
+- Dynamic modules expose **functions only**. If a call's regeneration produces the
+  name as a non-callable (a constant), the call raises `AttributeError`; if the
+  model fails to produce the requested symbol at all, the existing module and
+  snapshot are left untouched. Use `wishful.static.*` for modules with data
+  attributes.
+
 ### 4) Settings & singletons
 
 - `wishful.settings` is stored on `builtins` so it survives module reloads (handy for tests).
@@ -59,7 +74,7 @@ print(programming_joke())  # Fresh generation
 ### 5) Cache layout
 
 - `wishful.static.foo` → `.wishful/foo.py`
-- `wishful.dynamic.foo` → `.wishful/foo.py` (same cache file) plus dynamic snapshot `.wishful/_dynamic/foo.py`
+- `wishful.dynamic.foo` → `.wishful/_dynamic/foo.py` (a disjoint namespace — dynamic snapshots never collide with static cache files)
 - CLI helpers (`wishful inspect/clear/regen`) and Python helpers (`inspect_cache`, `clear_cache`, `regenerate`) manage these paths.
 
 That's the core loop. Everything else (CLI, types, logging) builds on this.

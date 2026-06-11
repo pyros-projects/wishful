@@ -3,15 +3,12 @@ from __future__ import annotations
 import ast
 import inspect
 import linecache
-import os
 from pathlib import Path
 from textwrap import dedent
 from typing import Iterable, List, Sequence
 
+from wishful.config import configure, settings
 from wishful.types import get_all_type_schemas, get_output_type_for_function
-
-# Default radius for surrounding-context capture; configurable via env + setter.
-_context_radius = int(os.getenv("WISHFUL_CONTEXT_RADIUS", "3"))
 
 
 class ImportContext:
@@ -89,6 +86,24 @@ def _alias_targets(aliases: Sequence[ast.alias], fullname: str) -> list[str]:
     ]
 
 
+def _nested_request(tree: ast.AST, fullname: str) -> str | None:
+    """Return the deeper module name when the call site imports below ``fullname``.
+
+    ``import wishful.static.a.b`` (or ``from wishful.static.a.b import c``)
+    while loading ``wishful.static.a`` is a nested wish — unsupported.
+    """
+    prefix = fullname + "."
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            for alias in node.names:
+                if alias.name.startswith(prefix):
+                    return alias.name
+        elif isinstance(node, ast.ImportFrom):
+            if node.module and node.module.startswith(prefix):
+                return node.module
+    return None
+
+
 def _is_plain_import(fullname: str, tree: ast.AST) -> bool:
     """Return True when the line is an ast.Import of the fullname (not ImportFrom)."""
     for node in ast.walk(tree):
@@ -100,7 +115,9 @@ def _is_plain_import(fullname: str, tree: ast.AST) -> bool:
 
 
 def _matches_import_from(module: str | None, fullname: str) -> bool:
-    return bool(module) and module.startswith("wishful") and fullname.startswith(module)
+    if not module:
+        return False
+    return module.startswith("wishful") and fullname.startswith(module)
 
 
 def _matches_import(name: str, fullname: str) -> bool:
@@ -123,11 +140,25 @@ def discover(fullname: str, runtime_context: dict | None = None) -> ImportContex
         if not code_line:
             continue
 
+        tree = _safe_parse_line(code_line)
+        if tree is not None:
+            # Nested wishes have never worked (generated parents are not
+            # packages); fail BEFORE the parent burns an LLM call, with an
+            # error that names the problem instead of "X is not a package".
+            nested = _nested_request(tree, fullname)
+            if nested is not None:
+                flat = nested.rsplit(".", 1)[-1]
+                namespace = ".".join(fullname.split(".")[:2])
+                raise ImportError(
+                    f"nested wishful module {nested!r} is not supported: wish "
+                    f"names are single-level. Flatten it, e.g. "
+                    f"'{namespace}.{flat}'. No code was generated."
+                )
+
         functions = _parse_imported_names(code_line, fullname)
         if not functions:
             continue
 
-        tree = _safe_parse_line(code_line)
         if tree and _is_plain_import(fullname, tree):
             functions = []
 
@@ -240,8 +271,9 @@ def _parse_file_safe(filename: str) -> ast.AST | None:
 
 
 def _build_context_snippets(filename: str, lineno: int, functions: Sequence[str]) -> str | None:
-    snippets = [_gather_context_lines(filename, lineno, radius=_context_radius)]
-    snippets += _gather_usage_context(filename, functions, radius=_context_radius)
+    radius = settings.context_radius
+    snippets = [_gather_context_lines(filename, lineno, radius=radius)]
+    snippets += _gather_usage_context(filename, functions, radius=radius)
     combined = "\n\n".join(part for part in snippets if part)
     return combined or None
 
@@ -257,8 +289,9 @@ def _dedupe(items: Sequence[str]) -> list[str]:
 
 
 def set_context_radius(radius: int) -> None:
-    """Update the global context radius used for import discovery."""
-    global _context_radius
-    if radius < 0:
-        raise ValueError("context radius must be non-negative")
-    _context_radius = radius
+    """Update the context radius used for import discovery.
+
+    Thin wrapper over ``configure(context_radius=...)`` — the radius lives in
+    Settings so it is configure/reset/env aware like every other knob.
+    """
+    configure(context_radius=radius)

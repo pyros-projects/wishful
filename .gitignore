@@ -11,6 +11,7 @@ wheels/
 .magic/
 .pytest_cache/
 coverage.xml
+coverage.json
 .coverage
 .internal/
 .wishful/
@@ -22,3 +23,5 @@ docs-site/dist/
 .claude/
 .memsearch/
 .pyro/
+
+.compound-engineering/*.local.yaml

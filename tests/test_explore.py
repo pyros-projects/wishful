@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import asyncio
-import time
 
 import pytest
 
@@ -16,6 +15,272 @@ def make_async_fake(sync_fn):
     async def async_wrapper(*args, **kwargs):
         return sync_fn(*args, **kwargs)
     return async_wrapper
+
+
+class TestOwnedEventLoop:
+    """explore() owns its event loop and never touches the host's (plan R5)."""
+
+    def test_explore_inside_running_loop(self, monkeypatch):
+        """Jupyter simulation: explore() called from within asyncio.run() works."""
+        def fake_generate(module, functions, context, **kwargs):
+            return "def f():\n    return 'from-loop'\n"
+
+        monkeypatch.setattr(
+            explorer_module, "agenerate_module_code", make_async_fake(fake_generate)
+        )
+
+        async def jupyter_cell():
+            # Synchronous explore() from inside a running loop — must not
+            # raise, must not re-enter or patch the host loop.
+            return explore(
+                "wishful.static.inloop.f",
+                variants=1,
+                test=lambda fn: fn() == "from-loop",
+                verbose=False,
+                save_results=False,
+            )
+
+        winner = asyncio.run(jupyter_cell())
+        assert winner() == "from-loop"
+
+    def test_sequential_explores_share_owned_loop(self, monkeypatch):
+        """Back-to-back explore() calls reuse one healthy loop (litellm needs this)."""
+        def fake_generate(module, functions, context, **kwargs):
+            return "def f():\n    return 1\n"
+
+        monkeypatch.setattr(
+            explorer_module, "agenerate_module_code", make_async_fake(fake_generate)
+        )
+
+        for round_no in range(3):
+            fn = explore(
+                f"wishful.static.seq{round_no}.f",
+                variants=1,
+                test=lambda fn: True,
+                verbose=False,
+                save_results=False,
+            )
+            assert callable(fn)
+        loop = explorer_module._owned_loop
+        assert loop is not None and not loop.is_closed()
+
+    def test_no_nest_asyncio_remains(self):
+        import pathlib
+
+        src = pathlib.Path(explorer_module.__file__).read_text()
+        assert "import nest_asyncio" not in src  # prose may mention it; code must not
+
+
+class TestBoundedCandidates:
+    """User callables are time-bounded and contained (plan R4).
+
+    A hanging or exiting candidate is recorded as a variant failure; the
+    explore run completes and the host process survives.
+    """
+
+    @staticmethod
+    def _passing_generate(module, functions, context, **kwargs):
+        return "def f():\n    return 1\n"
+
+    def test_hanging_test_recorded_as_timeout_failure(self, monkeypatch):
+        import time
+
+        monkeypatch.setattr(
+            explorer_module, "agenerate_module_code", make_async_fake(self._passing_generate)
+        )
+
+        def hanging_test(fn):
+            time.sleep(5)  # well past the per-variant budget; daemon thread ends on its own
+            return True
+
+        with pytest.raises(ExplorationError) as exc_info:
+            explore(
+                "wishful.static.bounded.f",
+                variants=1,
+                test=hanging_test,
+                timeout_per_variant=0.3,
+                verbose=False,
+                save_results=False,
+            )
+        assert any("timeout" in failure for failure in exc_info.value.failures)
+
+    def test_sys_exit_in_test_does_not_kill_host(self, monkeypatch):
+        monkeypatch.setattr(
+            explorer_module, "agenerate_module_code", make_async_fake(self._passing_generate)
+        )
+
+        def exiting_test(fn):
+            raise SystemExit(3)
+
+        with pytest.raises(ExplorationError) as exc_info:
+            explore(
+                "wishful.static.bounded.f",
+                variants=1,
+                test=exiting_test,
+                timeout_per_variant=2.0,
+                verbose=False,
+                save_results=False,
+            )
+        # The host is alive (we got an ExplorationError, not a process exit)
+        # and the failure names the contained exception.
+        assert any("SystemExit" in failure for failure in exc_info.value.failures)
+
+    def test_sys_exit_in_benchmark_fails_variant(self, monkeypatch):
+        monkeypatch.setattr(
+            explorer_module, "agenerate_module_code", make_async_fake(self._passing_generate)
+        )
+
+        def exiting_benchmark(fn):
+            raise SystemExit(1)
+
+        with pytest.raises(ExplorationError):
+            explore(
+                "wishful.static.bounded.f",
+                variants=1,
+                test=lambda fn: True,
+                benchmark=exiting_benchmark,
+                timeout_per_variant=2.0,
+                verbose=False,
+                save_results=False,
+            )
+
+
+class TestFullFailureMessages:
+    """ExplorationError carries full, untruncated failure text (plan R6)."""
+
+    def test_failures_contain_full_exception_text(self, monkeypatch):
+        def fake_generate(module, functions, context, **kwargs):
+            return "def f():\n    return 1\n"
+
+        monkeypatch.setattr(
+            explorer_module, "agenerate_module_code", make_async_fake(fake_generate)
+        )
+
+        long_reason = "x" * 300  # far past any display width
+
+        def failing_test(fn):
+            raise ValueError(f"detailed diagnosis: {long_reason}")
+
+        with pytest.raises(ExplorationError) as exc_info:
+            explore(
+                "wishful.static.longmsg.f",
+                variants=1,
+                test=failing_test,
+                verbose=False,
+                save_results=False,
+            )
+        combined = "\n".join(exc_info.value.failures)
+        assert long_reason in combined  # nothing truncated the stored message
+
+
+class TestWinnerMerge:
+    """Caching a winner must not clobber other symbols in the module."""
+
+    def test_explore_preserves_sibling_symbols(self, monkeypatch, tmp_path):
+        import wishful
+        from wishful.cache import manager
+
+        wishful.configure(cache_dir=tmp_path / ".wishful")
+        # A sibling function already lives in the target module.
+        manager.write_cached(
+            "wishful.static.text",
+            "def keep_me():\n    return 'kept'\n\n\ndef extract(s):\n    return 'old'\n",
+        )
+
+        def fake_generate(module, functions, context, **kwargs):
+            return "def extract(s):\n    return 'new'\n"
+
+        monkeypatch.setattr(
+            explorer_module, "agenerate_module_code", make_async_fake(fake_generate)
+        )
+
+        explore(
+            "wishful.static.text.extract",
+            variants=1,
+            test=lambda fn: fn("x") == "new",
+            verbose=False,
+            save_results=False,
+        )
+
+        merged = manager.read_cached("wishful.static.text")
+        ns: dict = {}
+        exec(merged, ns)
+        assert ns["keep_me"]() == "kept"      # sibling survived
+        assert ns["extract"]("x") == "new"    # target replaced
+        manager.clear_cache()
+
+    def test_merge_into_module_helper(self):
+        from wishful.explore.explorer import _merge_into_module
+
+        assert _merge_into_module(None, "f", "def f():\n    return 1\n").startswith("def f")
+        merged = _merge_into_module(
+            "def a():\n    return 1\n\n\ndef b():\n    return 2\n", "b", "def b():\n    return 3\n"
+        )
+        ns: dict = {}
+        exec(merged, ns)
+        assert ns["a"]() == 1 and ns["b"]() == 3
+
+    def test_merge_hoists_future_import_and_compiles(self):
+        from wishful.explore.explorer import _merge_into_module
+
+        existing = "def keep():\n    return 1\n"
+        winner = "from __future__ import annotations\n\ndef target(x: list) -> int:\n    return len(x)\n"
+        merged = _merge_into_module(existing, "target", winner)
+        compile(merged, "<test>", "exec")  # would raise if __future__ were mid-file
+        assert merged.startswith("from __future__ import annotations")
+
+    def test_merge_warns_on_sibling_name_collision(self):
+        """A winner whose helper shares a sibling's name silently shadows it after
+        the merge; that must at least be logged, not silent."""
+        from loguru import logger as loguru_logger
+
+        from wishful.explore.explorer import _merge_into_module
+
+        existing = "def keep_me():\n    return 'orig'\n\n\ndef helper():\n    return 1\n"
+        # The winner redefines `helper`, an existing sibling.
+        winner = "def helper():\n    return 2\n\n\ndef target():\n    return helper()\n"
+
+        records: list[str] = []
+        sink_id = loguru_logger.add(lambda m: records.append(str(m)), level="WARNING")
+        try:
+            _merge_into_module(existing, "target", winner)
+        finally:
+            loguru_logger.remove(sink_id)
+
+        assert any("helper" in r and "shadow" in r.lower() for r in records), records
+
+    def test_dangerous_sibling_does_not_sink_winner(self, monkeypatch, tmp_path):
+        import wishful
+        from wishful.cache import manager
+
+        wishful.configure(cache_dir=tmp_path / ".wishful")
+        # A pre-existing sibling contains forbidden code the caller never touched.
+        manager.write_cached(
+            "wishful.static.text",
+            "import os\n\n\ndef danger():\n    return os.getcwd()\n",
+        )
+
+        def fake_generate(module, functions, context, **kwargs):
+            return "def extract(s):\n    return s.upper()\n"
+
+        monkeypatch.setattr(
+            explorer_module, "agenerate_module_code", make_async_fake(fake_generate)
+        )
+
+        winner = explore(
+            "wishful.static.text.extract",
+            variants=1,
+            test=lambda fn: fn("x") == "X",
+            verbose=False,
+            save_results=False,
+        )
+        # explore must still return the valid winner (contract), and cache it alone
+        # rather than the merge that would re-introduce the dangerous sibling.
+        assert winner("hi") == "HI"
+        cached = manager.read_cached("wishful.static.text")
+        assert "import os" not in cached
+        assert "def extract" in cached
+        manager.clear_cache()
 
 
 class TestExploreBasic:
@@ -44,7 +309,7 @@ class TestExploreBasic:
 
         monkeypatch.setattr(explorer_module, "agenerate_module_code", make_async_fake(fake_generate))
 
-        fn = explore("wishful.static.test.fn", variants=5, verbose=False)
+        explore("wishful.static.test.fn", variants=5, verbose=False)
 
         assert call_count["n"] == 5
 
@@ -410,3 +675,130 @@ class TestExploreIntegration:
                 verbose=False,
                 # No benchmark provided!
             )
+
+
+class TestExploreTypeContext:
+    """explore's generation calls carry registered type context (plan R12)."""
+
+    def test_registered_schema_reaches_generation(self, monkeypatch):
+        # Register into the registry instance the explorer module actually
+        # consults. Going through `wishful.type` is churn-fragile: tests that
+        # purge wishful.* modules (test_namespaces) leave this file's
+        # collection-time explorer bound to the OLD registry while a fresh
+        # `import wishful` writes to a NEW one.
+        registry = explorer_module.get_all_type_schemas.__globals__["_registry"]
+
+        class Point:
+            x: int
+            y: int
+
+        registry.register(Point, output_for="make_point")
+
+        seen = {}
+
+        async def spy_generate(module, functions, context, **kwargs):
+            seen["type_schemas"] = kwargs.get("type_schemas")
+            seen["function_output_types"] = kwargs.get("function_output_types")
+            return "def make_point():\n    return {'x': 1, 'y': 2}\n"
+
+        monkeypatch.setattr(explorer_module, "agenerate_module_code", spy_generate)
+
+        explore(
+            "wishful.static.geo.make_point",
+            variants=1,
+            test=lambda fn: True,
+            verbose=False,
+            save_results=False,
+        )
+
+        assert seen["type_schemas"] and "Point" in seen["type_schemas"]
+        assert seen["function_output_types"] == {"make_point": "Point"}
+
+    def test_explorer_routes_through_shared_helper(self, monkeypatch):
+        from wishful.core import execution
+
+        calls = []
+        real = execution.compile_and_exec
+
+        def spy(source, function_name, **kwargs):
+            calls.append(function_name)
+            return real(source, function_name, **kwargs)
+
+        monkeypatch.setattr(explorer_module, "compile_and_exec", spy)
+        monkeypatch.setattr(
+            explorer_module,
+            "agenerate_module_code",
+            make_async_fake(lambda *a, **k: "def g():\n    return 1\n"),
+        )
+
+        explore(
+            "wishful.static.shared.g",
+            variants=1,
+            test=lambda fn: True,
+            verbose=False,
+            save_results=False,
+        )
+        assert "g" in calls
+
+
+class TestOwnedLoopRobustness:
+    """The owned loop survives thread death and never wedges explore (review P1s)."""
+
+    @staticmethod
+    def _fake_generate(module, functions, context, **kwargs):
+        return "def f():\n    return 1\n"
+
+    def test_recovers_after_loop_thread_death(self, monkeypatch):
+        monkeypatch.setattr(
+            explorer_module, "agenerate_module_code", make_async_fake(self._fake_generate)
+        )
+
+        # Prime the loop, then kill its thread the way a real crash would: stop
+        # the loop so run_forever returns and the thread exits.
+        explore(
+            "wishful.static.robust1.f",
+            variants=1, test=lambda fn: True, verbose=False, save_results=False,
+        )
+        loop = explorer_module._owned_loop
+        thread = explorer_module._owned_thread
+        loop.call_soon_threadsafe(loop.stop)
+        thread.join(timeout=10)
+        assert not thread.is_alive()
+        assert not loop.is_closed()  # the trap: dead thread, loop looks healthy
+
+        # Next explore must detect the dead thread and start a fresh loop.
+        fn = explore(
+            "wishful.static.robust2.f",
+            variants=1, test=lambda fn: True, verbose=False, save_results=False,
+        )
+        assert fn() == 1
+        assert explorer_module._owned_loop is not loop
+
+    def test_reentrant_explore_inside_test_callable(self, monkeypatch):
+        """A user test that itself calls explore() must complete, not deadlock."""
+        monkeypatch.setattr(
+            explorer_module, "agenerate_module_code", make_async_fake(self._fake_generate)
+        )
+
+        def test_that_explores(fn):
+            inner = explore(
+                "wishful.static.inner.f",
+                variants=1, test=lambda g: g() == 1, verbose=False, save_results=False,
+            )
+            return inner() == 1 and fn() == 1
+
+        import time as _time
+
+        start = _time.perf_counter()
+        outer = explore(
+            "wishful.static.outer.f",
+            variants=1,
+            test=test_that_explores,
+            timeout_per_variant=20.0,
+            verbose=False,
+            save_results=False,
+        )
+        elapsed = _time.perf_counter() - start
+        assert outer() == 1
+        # Pre-fix this circular-waited until timeout_per_variant; now it's fast.
+        assert elapsed < 10.0, f"re-entrant explore took {elapsed:.1f}s — loop blocked?"
