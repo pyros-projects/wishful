@@ -85,12 +85,38 @@ def test_dynamic_proxy_regenerates_on_each_access(monkeypatch):
 
     import wishful.dynamic.proxy_story as proxy_story
 
+    after_import = call_count["n"]
     first = proxy_story.next_line()
     second = proxy_story.next_line()
 
-    # Each call triggers regeneration with runtime context; counts should climb
+    # Each *call* regenerates exactly once with runtime context — accessing the
+    # attribute no longer double-generates. (Was 2 generations per call.)
     assert first != second
-    assert call_count["n"] >= 4  # import regen + attr access + two call-time regens
+    assert call_count["n"] == after_import + 2
+
+    # Probing an attribute (hasattr/dir) must not cost a generation.
+    before_probe = call_count["n"]
+    hasattr(proxy_story, "never_generated_name")
+    assert call_count["n"] == before_probe
+
+
+def test_dynamic_module_identity_survives_regeneration(monkeypatch):
+    """A dynamic module keeps its name/spec/loader across call-time re-exec."""
+    def fake_generate(module, functions, context, **kwargs):
+        return "def line():\n    return 'x'\n"
+
+    monkeypatch.setattr(loader, "generate_module_code", fake_generate)
+    manager.clear_cache()
+    _reset_modules()
+
+    import wishful.dynamic.identity_demo as demo
+
+    assert demo.__name__ == "wishful.dynamic.identity_demo"
+    spec_before = demo.__spec__
+    demo.line()  # forces a clear_first re-exec
+    assert demo.__name__ == "wishful.dynamic.identity_demo"
+    assert demo.__spec__ is spec_before
+    assert demo.__loader__ is not None
 
 
 def test_static_and_dynamic_independent_caches(monkeypatch):

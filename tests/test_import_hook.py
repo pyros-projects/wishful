@@ -175,9 +175,11 @@ def test_dynamic_call_includes_runtime_context(monkeypatch):
 
     import wishful.dynamic.ctxdemo as ctxdemo
 
-    # First access triggers regeneration via proxy
+    # Importing the module generated it once; merely *accessing* an attribute
+    # does not generate again (the call does).
+    after_import = call_count["n"]
     fn = ctxdemo.make_line
-    assert call_count["n"] >= 1
+    assert call_count["n"] == after_import
 
     # Call should trigger regeneration with runtime context
     result = fn("hello", mood="grim")
@@ -187,8 +189,8 @@ def test_dynamic_call_includes_runtime_context(monkeypatch):
     assert any(context and "Runtime call context" in context for context in contexts)
     assert modes and modes[-1] == "dynamic"
 
-    # Call count should reflect import + attr + call-time generations
-    assert call_count["n"] >= 3
+    # One generation at import + one at call time — no wasteful attr-access gen.
+    assert call_count["n"] == after_import + 1
 
 
 def test_static_syntax_error_retries_once(monkeypatch):

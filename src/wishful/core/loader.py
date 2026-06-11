@@ -119,19 +119,16 @@ class DynamicProxyModule(ModuleType):
             return super().__getattribute__(name)
 
         loader = super().__getattribute__("_wishful_loader")
-        loader._regenerate_for_proxy(self, name)
 
-        attr = super().__getattribute__(name)
+        # Lazy: do NOT generate on attribute access. Return a callable that
+        # regenerates exactly once — with the real runtime arguments — when it is
+        # invoked. Accessing the attribute (or probing it via hasattr/dir) costs
+        # no LLM call; only calling the function does.
+        def _wrapped(*args, **kwargs):
+            return loader._call_with_runtime(self, name, args, kwargs)
 
-        if callable(attr):
-            def _wrapped(*args, **kwargs):
-                return loader._call_with_runtime(self, name, args, kwargs)
-
-            _wrapped.__name__ = name
-            _wrapped.__doc__ = getattr(attr, "__doc__", None)
-            return _wrapped
-
-        return attr
+        _wrapped.__name__ = name
+        return _wrapped
 
 
 class MagicLoader(importlib.abc.Loader):
@@ -275,11 +272,20 @@ class MagicLoader(importlib.abc.Loader):
         # Validated. Ask for approval BEFORE executing so the gate actually
         # guards execution (it used to run after exec — the code had already run).
         self._maybe_review(source)
-        preserved_loader = module.__dict__.get("_wishful_loader")
+        # Preserve the module machinery across a clear+re-exec — the generated
+        # source doesn't define these, so without this the module would lose its
+        # name/spec/loader identity after the first dynamic regeneration.
         if clear_first:
+            preserved = {
+                key: module.__dict__[key]
+                for key in (
+                    "_wishful_loader", "__name__", "__spec__", "__loader__",
+                    "__package__", "__file__", "__builtins__",
+                )
+                if key in module.__dict__
+            }
             module.__dict__.clear()
-            if preserved_loader is not None:
-                module.__dict__["_wishful_loader"] = preserved_loader
+            module.__dict__.update(preserved)
         module.__file__ = filename
         module.__package__ = self.fullname.rpartition('.')[0]
         exec(code_obj, module.__dict__)
@@ -377,13 +383,6 @@ class MagicLoader(importlib.abc.Loader):
         cache.delete_cached(self.fullname)
         source, path = self._generate_and_cache(desired, context)
         self._exec_source(source, module, context, clear_first=True, file_path=str(path))
-
-    def _regenerate_for_proxy(self, module: ModuleType, requested: str) -> None:
-        ctx = discover(self.fullname)
-        desired = set(ctx.functions or []) | {requested} | self._declared_symbols(module)
-        ctx.functions = sorted(desired)
-        source, path = self._generate_and_cache(ctx.functions, ctx)
-        self._exec_source(source, module, ctx, clear_first=True, file_path=str(path))
 
     def _call_with_runtime(self, module: ModuleType, func_name: str, args, kwargs):
         ctx = discover(self.fullname, runtime_context={"function": func_name, "args": args, "kwargs": kwargs})
