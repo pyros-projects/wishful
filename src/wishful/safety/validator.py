@@ -16,9 +16,15 @@ _FORBIDDEN_IMPORTS = {"os", "subprocess", "sys", "importlib", "builtins", "ctype
 # Bare-name calls that are never allowed (direct or via the __import__ gadget).
 _FORBIDDEN_CALLS = {"eval", "exec", "compile", "__import__"}
 
-# Bare-name *references* (load context) that signal a gadget chain even when not
-# called directly, e.g. ``f = __import__`` or ``b = __builtins__``.
-_FORBIDDEN_NAMES = {"eval", "exec", "compile", "__import__", "__builtins__"}
+# Builtins that are dangerous to reference *by name without calling* — aliasing
+# them (``f = open``, ``def g(x=open)``, ``g = getattr``) is a gadget to defeat
+# the call-site checks. A direct call (``open(...)``, ``getattr(...)``) is
+# allowed and validated separately.
+_DANGEROUS_BUILTINS = {
+    "open", "getattr", "setattr", "delattr",
+    "globals", "vars", "locals",
+    "eval", "exec", "compile", "__import__", "__builtins__",
+}
 
 # Attribute-call bases that, when *unbound* (not a local variable), can only
 # resolve through injected globals — block those.
@@ -178,7 +184,7 @@ def _check_subscripts(tree: ast.AST) -> None:
         if isinstance(value, ast.Name) and value.id == "__builtins__":
             raise SecurityError("Subscripting __builtins__ is blocked")
         if isinstance(value, ast.Call) and isinstance(value.func, ast.Name):
-            if value.func.id in {"globals", "vars"}:
+            if value.func.id in {"globals", "vars", "locals"}:
                 raise SecurityError(f"Subscripting {value.func.id}() is blocked")
 
 
@@ -202,11 +208,22 @@ def _open_mode_node(call: ast.Call) -> ast.AST | None:
     return None
 
 
-def _check_forbidden_names(tree: ast.AST) -> None:
+def _check_bare_dangerous_refs(tree: ast.AST) -> None:
+    """Block a dangerous builtin referenced by name without being called.
+
+    A direct call (``open(...)``, ``getattr(...)``) is fine and checked at the
+    call site; a bare reference (``f = open``, ``def g(x=open)``, ``g = getattr``,
+    ``[eval]``) is an aliasing gadget that defeats those checks.
+    """
+    called_func_nodes = {
+        id(node.func)
+        for node in ast.walk(tree)
+        if isinstance(node, ast.Call) and isinstance(node.func, ast.Name)
+    }
     for node in ast.walk(tree):
         if isinstance(node, ast.Name) and isinstance(node.ctx, ast.Load):
-            if node.id in _FORBIDDEN_NAMES:
-                raise SecurityError(f"Forbidden builtin reference: {node.id}")
+            if node.id in _DANGEROUS_BUILTINS and id(node) not in called_func_nodes:
+                raise SecurityError(f"Bare reference to dangerous builtin: {node.id}")
 
 
 def validate_code(source: str, *, allow_unsafe: bool = False) -> None:
@@ -228,4 +245,4 @@ def validate_code(source: str, *, allow_unsafe: bool = False) -> None:
     _check_imports(tree)
     _check_calls(tree, bound_names)
     _check_subscripts(tree)
-    _check_forbidden_names(tree)
+    _check_bare_dangerous_refs(tree)

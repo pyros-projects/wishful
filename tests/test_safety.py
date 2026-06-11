@@ -25,8 +25,14 @@ BLOCKED = [
     "sys.exit(1)",               # unbound sys
     "globals()['eval']('1')",
     "vars()['__import__']",
+    "locals()['__builtins__']['eval']",   # locals() subscript gadget
+    "b = locals()['__import__']",          # locals() subscript
     "f = __import__",            # bare __import__ reference
     "b = __builtins__",          # bare __builtins__ reference
+    "f = open",                  # aliased open (gadget)
+    "g = getattr\nr = g(o, 'system')",   # aliased getattr (gadget)
+    "def h(x=open):\n    return x('f', 'w')",  # open as default arg
+    "k = eval",                  # aliased eval
 ]
 
 # Legitimate code that must keep passing — including a shadowed `os` local,
@@ -55,11 +61,11 @@ ALLOWED = [
     "value: int = 3\nresult = value",                               # ann-assign
 ]
 
-# Known residual bypasses: AST scanning cannot see aliased or computed access.
+# Known residual bypasses: AST scanning cannot see computed/indirect access.
 # Documented as xfail so a future hardening that catches them surfaces as xpass.
 RESIDUAL_BYPASSES = [
-    "g = getattr\nr = g(obj, 'system')",
-    "m = globals().get('__builtins__')",
+    "m = globals().get('__builtins__')",          # builtins via dict .get(), not subscript
+    "r = getattr(obj, 'sys' + 'tem')",            # attribute name built at runtime
 ]
 
 

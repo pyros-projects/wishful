@@ -41,14 +41,23 @@ def _source_defines(source: str, name: str) -> bool:
         tree = ast.parse(source)
     except SyntaxError:
         return False
+
+    def _target_binds(target: ast.AST) -> bool:
+        if isinstance(target, ast.Name):
+            return target.id == name
+        if isinstance(target, (ast.Tuple, ast.List)):
+            return any(_target_binds(elt) for elt in target.elts)
+        if isinstance(target, ast.Starred):
+            return _target_binds(target.value)
+        return False
+
     for node in tree.body:
         if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
             if node.name == name:
                 return True
         elif isinstance(node, ast.Assign):
-            for target in node.targets:
-                if isinstance(target, ast.Name) and target.id == name:
-                    return True
+            if any(_target_binds(t) for t in node.targets):
+                return True
         elif isinstance(node, ast.AnnAssign):
             if isinstance(node.target, ast.Name) and node.target.id == name:
                 return True
@@ -254,6 +263,13 @@ class MagicLoader(importlib.abc.Loader):
                 allow_retry=False,
             )
             return
+        except SecurityError:
+            # A rejected static cache file (e.g. written under allow_unsafe and
+            # later loaded with safety on) must not persist and permanently break
+            # the import — delete it so a later run can regenerate cleanly.
+            if self.mode == "static":
+                cache.delete_cached(self.fullname)
+            raise
 
         # Validated. Ask for approval BEFORE executing so the gate actually
         # guards execution (it used to run after exec — the code had already run).

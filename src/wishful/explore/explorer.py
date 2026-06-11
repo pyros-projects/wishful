@@ -224,9 +224,12 @@ async def _explore_async(
             return _collect_all_passing(generated, module_name, function_name)
         winner = _select_best_score(generated, module_name, function_name, progress)
 
-    # Cache the winning variant as a regular wishful module
-    # So subsequent `from wishful.static.X import Y` uses the proven winner
+    # Cache the winning variant as a regular wishful module so subsequent
+    # `from wishful.static.X import Y` uses the proven winner. Re-validate under
+    # current settings right before writing — the variant was validated when it
+    # was generated, but safety could have been toggled since.
     if hasattr(winner, "__wishful_source__"):
+        validate_code(winner.__wishful_source__, allow_unsafe=settings.allow_unsafe)
         write_cached(module_name, winner.__wishful_source__)
 
     return winner

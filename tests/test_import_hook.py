@@ -310,8 +310,9 @@ def test_security_violation_not_cached_then_recovers(monkeypatch):
     assert calls["n"] == 2
 
 
-def test_cache_hit_revalidates_poisoned_source(monkeypatch):
-    """A poisoned cache file (dangerous code) is rejected at load time."""
+def test_cache_hit_revalidates_poisoned_source_and_cleans_up(monkeypatch):
+    """A poisoned cache file is rejected at load AND deleted so it can't
+    permanently break the import."""
     configure(allow_unsafe=False)
     manager.write_cached(
         "wishful.static.poisoned",
@@ -321,6 +322,34 @@ def test_cache_hit_revalidates_poisoned_source(monkeypatch):
 
     with pytest.raises(SecurityError):
         importlib.import_module("wishful.static.poisoned")
+    # The rejected cache entry is removed, not left to fail forever.
+    assert not manager.has_cached("wishful.static.poisoned")
+
+
+def test_attribute_defined_via_unpacking_is_accepted(monkeypatch):
+    """A regeneration that binds the requested symbol via tuple unpacking must
+    be committed, not rejected (the _source_defines AST check must see it)."""
+    calls = {"n": 0}
+
+    def gen(module, functions, context, **kwargs):
+        calls["n"] += 1
+        if calls["n"] == 1:
+            return "def foo():\n    return 'foo'\n"
+        return (
+            "def foo():\n    return 'foo'\n"
+            "def _pair():\n    return ('a', 'b')\n"
+            "bar, baz = _pair()\n"
+        )
+
+    monkeypatch.setattr(loader, "generate_module_code", gen)
+    manager.clear_cache()
+    _reset_modules()
+
+    from wishful.static.unpk import foo
+
+    assert foo() == "foo"
+    mod = sys.modules["wishful.static.unpk"]
+    assert mod.bar == "a"  # bound via unpacking; must be accepted
 
 
 def test_regenerate_dynamic_preserves_static_namesake():
