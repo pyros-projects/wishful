@@ -29,7 +29,8 @@ _DEFAULT_SYSTEM_PROMPT = os.getenv(
     ).strip(),
 )
 _DEFAULT_LOG_LEVEL = os.getenv("WISHFUL_LOG_LEVEL", "WARNING").upper()
-_DEFAULT_LOG_TO_FILE = os.getenv("WISHFUL_LOG_TO_FILE", "1") != "0"
+# Opt-in: a library must not create files in the user's CWD just on import.
+_DEFAULT_LOG_TO_FILE = os.getenv("WISHFUL_LOG_TO_FILE", "0") == "1"
 _DEFAULT_REQUEST_TIMEOUT = float(os.getenv("WISHFUL_REQUEST_TIMEOUT", "300"))
 
 
