@@ -113,25 +113,11 @@ class DynamicProxyModule(ModuleType):
       static mode for modules that carry data attributes.
     """
 
-    _SAFE_ATTRS = {
-        "__class__",
-        "__dict__",
-        "__doc__",
-        "__loader__",
-        "__name__",
-        "__package__",
-        "__path__",
-        "__spec__",
-        "__file__",
-        "__builtins__",
-        "_wishful_loader",
-    }
-
     def __getattribute__(self, name):
-        # Underscore-prefixed names (dunders, _private, IPython repr probes) must
-        # never trigger a paid regeneration — resolve them normally so a probe
-        # gets a plain AttributeError instead of a generation.
-        if name.startswith("_") or name in DynamicProxyModule._SAFE_ATTRS:
+        # Underscore-prefixed names (dunders, _private, _wishful_loader, IPython
+        # repr probes) must never trigger a paid regeneration — resolve them
+        # normally so a probe gets a plain AttributeError instead of a generation.
+        if name.startswith("_"):
             return super().__getattribute__(name)
 
         loader = super().__getattribute__("_wishful_loader")
