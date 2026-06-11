@@ -138,11 +138,43 @@ class TestTypeRegistry:
         assert "email: str" in schema
         assert "age: int = 0" in schema
     
+    def test_serialize_dataclass_default_factory(self):
+        """default_factory fields must render as field(default_factory=...),
+        not the <_MISSING_TYPE> garbage the self-comparison bug produced."""
+        from dataclasses import dataclass, field
+
+        @dataclass
+        class WithFactory:
+            tags: list = field(default_factory=list)
+            meta: dict = field(default_factory=dict)
+            name: str = "x"
+
+        registry = TypeRegistry()
+        registry.register(WithFactory)
+        schema = registry.get_schema("WithFactory")
+
+        assert "tags: list = field(default_factory=list)" in schema
+        assert "meta: dict = field(default_factory=dict)" in schema
+        assert "name: str = 'x'" in schema
+        assert "_MISSING_TYPE" not in schema
+
+    def test_format_annotation_preserves_generics(self):
+        """list[str]/Optional[int] must keep their arguments (the __name__
+        shortcut used to drop them)."""
+        from typing import Optional
+
+        registry = TypeRegistry()
+        assert registry._format_annotation(list[str]) == "list[str]"
+        assert registry._format_annotation(dict[str, int]) == "dict[str, int]"
+        # Optional renders as a union with None.
+        assert registry._format_annotation(Optional[int]) == "int | None"
+        assert registry._format_annotation(int) == "int"
+
     def test_serialize_typed_dict(self):
         """Test serialization of TypedDict."""
         registry = TypeRegistry()
         registry.register(SimpleTypedDict)
-        
+
         schema = registry.get_schema("SimpleTypedDict")
         assert schema is not None
         assert "class SimpleTypedDict" in schema
@@ -341,20 +373,29 @@ class TestIntegrationWithWishful:
 class TestEdgeCases:
     """Test edge cases and error handling."""
     
-    def test_register_same_type_twice(self):
-        """Test registering the same type multiple times."""
-        
-        @type_decorator
-        class DuplicateType(MockBaseModel):
+    def test_register_same_name_twice_last_wins(self):
+        """Re-registering a type name should let the latest output_for win.
+
+        Uses two distinctly-named classes sharing one registered name so the test
+        actually exercises re-registration instead of shadowing one definition
+        with another (the previous version was a no-op F811 redefinition)."""
+
+        class DuplicateTypeV1(MockBaseModel):
             value: str
-        
-        # Register again with different output_for
-        @type_decorator(output_for="func1")
-        class DuplicateType(MockBaseModel):
+
+        DuplicateTypeV1.__name__ = "DuplicateName"
+
+        class DuplicateTypeV2(MockBaseModel):
             value: str
-        
-        # Should not raise, last registration wins
-        assert get_output_type_for_function("func1") == "DuplicateType"
+            extra: str
+
+        DuplicateTypeV2.__name__ = "DuplicateName"
+
+        type_decorator(DuplicateTypeV1, output_for="func0")
+        type_decorator(DuplicateTypeV2, output_for="func1")
+
+        # Last registration wins for the shared name.
+        assert get_output_type_for_function("func1") == "DuplicateName"
     
     def test_empty_class(self):
         """Test registering an empty class."""

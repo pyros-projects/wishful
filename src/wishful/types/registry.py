@@ -7,9 +7,14 @@ that the LLM can use when generating code.
 from __future__ import annotations
 
 import inspect
+import types as _types
+from dataclasses import MISSING
 from dataclasses import fields as dataclass_fields
 from dataclasses import is_dataclass
-from typing import Any, Callable, TypeVar, get_type_hints
+from typing import Any, Callable, TypeVar, Union, get_args, get_origin, get_type_hints
+
+_UNION_TYPE = getattr(_types, "UnionType", None)  # PEP 604 X | Y (3.10+)
+_NONE_TYPE = type(None)  # captured before this module shadows builtin ``type``
 
 T = TypeVar("T")
 
@@ -206,15 +211,21 @@ class TypeRegistry:
         if dc_class.__doc__:
             lines.append(f'    """{dc_class.__doc__.strip()}"""')
 
+        # Resolve string annotations (from __future__ annotations) to real types.
+        try:
+            hints = get_type_hints(dc_class)
+        except Exception:
+            hints = {}
+
         for field in dataclass_fields(dc_class):
-            annotation = self._format_annotation(field.type)
-            if field.default is not field.default_factory:  # type: ignore
-                # Has a default value
-                default_repr = repr(field.default)
-                lines.append(f"    {field.name}: {annotation} = {default_repr}")
-            elif field.default_factory is not field.default_factory:  # type: ignore
+            annotation = self._format_annotation(hints.get(field.name, field.type))
+            if field.default is not MISSING:
+                lines.append(f"    {field.name}: {annotation} = {repr(field.default)}")
+            elif field.default_factory is not MISSING:  # type: ignore[comparison-overlap]
+                factory_name = getattr(field.default_factory, "__name__", None)
+                rendered = factory_name if factory_name and factory_name != "<lambda>" else "..."
                 lines.append(
-                    f"    {field.name}: {annotation} = field(default_factory=...)"
+                    f"    {field.name}: {annotation} = field(default_factory={rendered})"
                 )
             else:
                 lines.append(f"    {field.name}: {annotation}")
@@ -244,31 +255,45 @@ class TypeRegistry:
         return "\n".join(lines)
 
     def _format_annotation(self, annotation: Any) -> str:
-        """Format a type annotation as a string."""
-        if hasattr(annotation, "__name__"):
-            return annotation.__name__
+        """Format a type annotation as a string.
 
-        # Handle typing generics
-        if hasattr(annotation, "__origin__"):
-            origin = annotation.__origin__
-            args = getattr(annotation, "__args__", ())
+        Parameterized generics (``list[str]``, ``Optional[int]``) must be checked
+        BEFORE the bare-``__name__`` shortcut: on 3.10+ ``list[str].__name__`` is
+        ``"list"``, so the shortcut would silently drop the type arguments.
+        """
+        if annotation is _NONE_TYPE:
+            return "None"
 
+        origin = get_origin(annotation)
+        if origin is not None:
+            args = get_args(annotation)
+
+            if origin is Union or (_UNION_TYPE is not None and origin is _UNION_TYPE):
+                return " | ".join(self._format_annotation(a) for a in args)
             if origin is list:
-                return (
-                    f"list[{self._format_annotation(args[0])}]" if args else "list"
-                )
-            elif origin is dict:
+                return f"list[{self._format_annotation(args[0])}]" if args else "list"
+            if origin is dict:
                 key_type = self._format_annotation(args[0]) if args else "Any"
                 val_type = self._format_annotation(args[1]) if len(args) > 1 else "Any"
                 return f"dict[{key_type}, {val_type}]"
-            elif origin is tuple:
+            if origin is tuple:
                 arg_strs = ", ".join(self._format_annotation(a) for a in args)
                 return f"tuple[{arg_strs}]"
-            # Handle Union/Optional
-            elif hasattr(origin, "__name__") and origin.__name__ == "UnionType":
-                arg_strs = " | ".join(self._format_annotation(a) for a in args)
-                return arg_strs
+            if origin is set:
+                return f"set[{self._format_annotation(args[0])}]" if args else "set"
 
+            origin_name = getattr(origin, "__name__", None) or str(origin).replace("typing.", "")
+            if args:
+                arg_strs = ", ".join(self._format_annotation(a) for a in args)
+                return f"{origin_name}[{arg_strs}]"
+            return origin_name
+
+        # NB: builtin ``type`` is shadowed by this module's ``type`` decorator,
+        # so use inspect.isclass rather than isinstance(annotation, type).
+        if inspect.isclass(annotation):
+            return annotation.__name__
+        if hasattr(annotation, "__name__"):
+            return annotation.__name__
         return str(annotation).replace("typing.", "")
 
 
