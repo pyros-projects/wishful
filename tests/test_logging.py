@@ -139,6 +139,43 @@ def test_log_to_file_opt_in_creates_log(tmp_path):
     assert list(log_dir.glob("*.log"))
 
 
+def test_import_does_not_double_print_or_leak_debug(tmp_path):
+    """A fresh `import wishful` must leave loguru with a single console sink.
+
+    Before this fix wishful added its Rich sink but left loguru's default sink 0
+    in place, so every record printed twice (loguru default stderr + wishful's
+    Rich stdout) and wishful's own DEBUG internals leaked to the host's stderr
+    even at the default WARNING level.
+    """
+    import os
+    import subprocess
+    import sys
+    import textwrap
+
+    code = textwrap.dedent(
+        """
+        import wishful  # noqa: F401  (configures logging at import)
+        from loguru import logger
+        logger.debug("DEBUG_SENTINEL")
+        logger.warning("WARN_SENTINEL")
+        """
+    )
+    env = {**os.environ, "WISHFUL_FAKE_LLM": "1"}
+    for var in ("WISHFUL_DEBUG", "WISHFUL_LOG_LEVEL"):
+        env.pop(var, None)  # exercise the shipped default (WARNING, no debug)
+
+    result = subprocess.run(
+        [sys.executable, "-c", code],
+        capture_output=True,
+        text=True,
+        cwd=tmp_path,
+        env=env,
+    )
+    combined = result.stdout + result.stderr
+    assert combined.count("WARN_SENTINEL") == 1, combined  # not double-printed
+    assert "DEBUG_SENTINEL" not in combined, combined       # no debug leak at WARNING
+
+
 def test_log_to_file_readonly_degrades_gracefully(tmp_path, monkeypatch):
     monkeypatch.setattr(wl, "_file_log_warned", False)
 

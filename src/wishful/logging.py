@@ -13,6 +13,7 @@ _configured = False
 # Only these sink ids belong to wishful; we never touch sinks the host added.
 _wishful_sink_ids: list[int] = []
 _file_log_warned = False
+_bootstrap_removed = False
 
 
 def _log_dir() -> Path:
@@ -43,11 +44,25 @@ def _configure_rich_console(level: str):
 
 
 def configure_logging(force: bool = False) -> None:
-    global _configured, _file_log_warned
+    global _configured, _file_log_warned, _bootstrap_removed
 
     # Avoid repeated reconfiguration unless forced
     if _configured and not force:
         return
+
+    # Remove loguru's default bootstrap sink (id 0) exactly once. It is loguru's
+    # own auto-installed stderr handler at DEBUG level — not a host-added sink — so
+    # leaving it in place made every record print twice (its plain stderr output
+    # plus wishful's Rich console sink) and leaked wishful's own DEBUG internals to
+    # the host's stderr even at the default WARNING level. We install our own
+    # console sink below, so the default is redundant. Host-added sinks keep their
+    # own ids (>= 1) and are never touched.
+    if not _bootstrap_removed:
+        try:
+            logger.remove(0)
+        except ValueError:
+            pass  # the host already removed loguru's default before importing us
+        _bootstrap_removed = True
 
     # Remove ONLY wishful's own sinks — never bare logger.remove(), which would
     # delete sinks the host application installed before importing wishful.
