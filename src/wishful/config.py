@@ -30,6 +30,7 @@ _DEFAULT_SYSTEM_PROMPT = os.getenv(
 )
 _DEFAULT_LOG_LEVEL = os.getenv("WISHFUL_LOG_LEVEL", "WARNING").upper()
 _DEFAULT_LOG_TO_FILE = os.getenv("WISHFUL_LOG_TO_FILE", "1") != "0"
+_DEFAULT_REQUEST_TIMEOUT = float(os.getenv("WISHFUL_REQUEST_TIMEOUT", "300"))
 
 
 @dataclass
@@ -51,6 +52,7 @@ class Settings:
     system_prompt: str = _DEFAULT_SYSTEM_PROMPT
     log_level: str = _DEFAULT_LOG_LEVEL
     log_to_file: bool = _DEFAULT_LOG_TO_FILE
+    request_timeout: float = _DEFAULT_REQUEST_TIMEOUT
 
     def copy(self) -> "Settings":
         return Settings(
@@ -65,6 +67,7 @@ class Settings:
             system_prompt=self.system_prompt,
             log_level=self.log_level,
             log_to_file=self.log_to_file,
+            request_timeout=self.request_timeout,
         )
 
 
@@ -111,6 +114,7 @@ def configure(
     system_prompt: Optional[str] = None,
     log_level: Optional[str] = None,
     log_to_file: Optional[bool] = None,
+    request_timeout: Optional[float] = None,
 ) -> None:
     """Update global settings in-place.
 
@@ -130,6 +134,7 @@ def configure(
         "system_prompt": system_prompt,
         "log_level": log_level.upper() if isinstance(log_level, str) else log_level,
         "log_to_file": log_to_file,
+        "request_timeout": request_timeout,
     }
 
     # If debug explicitly enabled, default to DEBUG level and file logging unless
@@ -169,6 +174,7 @@ def reset_defaults() -> None:
     settings.system_prompt = defaults.system_prompt
     settings.log_level = defaults.log_level
     settings.log_to_file = defaults.log_to_file
+    settings.request_timeout = defaults.request_timeout
 
     logging_mod = _load_logging_module()
     if logging_mod:

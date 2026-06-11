@@ -15,7 +15,22 @@ class GenerationError(ImportError):
     """Raised when the LLM call fails or returns empty output."""
 
 
-_FAKE_MODE = os.getenv("WISHFUL_FAKE_LLM", "0") == "1"
+_EMPTY_CONTENT_MSG = "LLM returned empty content"
+
+
+def _is_fake_mode() -> bool:
+    """Read the fake-LLM flag per call so tests can toggle it without reimport."""
+    return os.getenv("WISHFUL_FAKE_LLM", "0") == "1"
+
+
+def _empty_content_error() -> GenerationError:
+    """Build the diagnostic raised after an empty-content response survives retry."""
+    return GenerationError(
+        f"{settings.model} returned empty content after 2 attempts. "
+        f"If this is a reasoning model, raise max_tokens (currently {settings.max_tokens}) "
+        f"or set WISHFUL_TEMPERATURE — reasoning models can spend the whole budget "
+        f"on hidden tokens and return nothing."
+    )
 
 
 def _fake_response(functions: Sequence[str]) -> str:
@@ -37,14 +52,23 @@ def generate_module_code(
 ) -> str:
     """Call the LLM (or fake stub) to generate module source code (sync version)."""
 
-    if _FAKE_MODE:
+    if _is_fake_mode():
         return _fake_response(functions)
 
-    response = _call_llm(
-        module, functions, context, type_schemas, function_output_types, mode
-    )
-    content = _extract_content(response)
-    return strip_code_fences(content).strip()
+    for _ in range(2):  # initial attempt + one retry on empty content
+        response = _call_llm(
+            module, functions, context, type_schemas, function_output_types, mode
+        )
+        try:
+            content = _extract_content(response)
+        except GenerationError as exc:
+            if str(exc) == _EMPTY_CONTENT_MSG:
+                continue
+            raise
+        code = strip_code_fences(content).strip()
+        if code:
+            return code
+    raise _empty_content_error()
 
 
 async def agenerate_module_code(
@@ -61,16 +85,25 @@ async def agenerate_module_code(
     concurrent operations or responsive UI updates.
     """
 
-    if _FAKE_MODE:
+    if _is_fake_mode():
         # Small delay to simulate async behavior in fake mode
         await asyncio.sleep(0.01)
         return _fake_response(functions)
 
-    response = await _acall_llm(
-        module, functions, context, type_schemas, function_output_types, mode
-    )
-    content = _extract_content(response)
-    return strip_code_fences(content).strip()
+    for _ in range(2):  # initial attempt + one retry on empty content
+        response = await _acall_llm(
+            module, functions, context, type_schemas, function_output_types, mode
+        )
+        try:
+            content = _extract_content(response)
+        except GenerationError as exc:
+            if str(exc) == _EMPTY_CONTENT_MSG:
+                continue
+            raise
+        code = strip_code_fences(content).strip()
+        if code:
+            return code
+    raise _empty_content_error()
 
 
 def _call_llm(
@@ -93,6 +126,7 @@ def _call_llm(
             messages=messages,
             temperature=settings.temperature,
             max_tokens=settings.max_tokens,
+            timeout=settings.request_timeout,
         )
     except Exception as exc:  # pragma: no cover - network path not executed in tests
         raise GenerationError(f"LLM call failed: {exc}") from exc
@@ -118,6 +152,7 @@ async def _acall_llm(
             messages=messages,
             temperature=settings.temperature,
             max_tokens=settings.max_tokens,
+            timeout=settings.request_timeout,
         )
     except Exception as exc:  # pragma: no cover - network path not executed in tests
         raise GenerationError(f"LLM call failed: {exc}") from exc
@@ -157,9 +192,9 @@ def _log_llm_call(
 def _extract_content(response) -> str:
     try:
         content = response["choices"][0]["message"]["content"]
-    except Exception as exc:  # pragma: no cover
+    except Exception as exc:
         raise GenerationError("Unexpected LLM response structure") from exc
 
     if not content or not content.strip():
-        raise GenerationError("LLM returned empty content")
+        raise GenerationError(_EMPTY_CONTENT_MSG)
     return content
