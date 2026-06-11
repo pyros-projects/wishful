@@ -119,6 +119,85 @@ def test_dynamic_module_identity_survives_regeneration(monkeypatch):
     assert demo.__loader__ is not None
 
 
+def test_dynamic_attribute_contract(monkeypatch):
+    """Pin the documented dynamic attribute semantics.
+
+    Access is lazy and free: every public attribute resolves to a callable
+    wrapper (so hasattr is always True), and no generation happens until the
+    wrapper is invoked.
+    """
+    call_count = {"n": 0}
+
+    def fake_generate(module, functions, context, **kwargs):
+        call_count["n"] += 1
+        return "def known():\n    return 'x'\n"
+
+    monkeypatch.setattr(loader, "generate_module_code", fake_generate)
+    manager.clear_cache()
+    _reset_modules()
+
+    import wishful.dynamic.contract_demo as demo
+
+    after_import = call_count["n"]
+    # hasattr is True for ANY public name — probing can't know what the model
+    # would generate, so it doesn't try (and doesn't pay).
+    assert hasattr(demo, "known")
+    assert hasattr(demo, "definitely_never_generated")
+    # Attribute access returns a callable wrapper, even for unseen names.
+    assert callable(demo.some_name_nobody_asked_for)
+    # None of the above cost a generation.
+    assert call_count["n"] == after_import
+
+
+def test_dynamic_call_failed_generation_leaves_module_intact(monkeypatch):
+    """A regeneration that omits the called symbol must not commit anything."""
+    sources = {"n": 0}
+
+    def fake_generate(module, functions, context, **kwargs):
+        sources["n"] += 1
+        if sources["n"] == 1:
+            return "def stable():\n    return 'v1'\n"
+        # Later generations fail to produce the requested symbol.
+        return "def unrelated():\n    return 'nope'\n"
+
+    monkeypatch.setattr(loader, "generate_module_code", fake_generate)
+    manager.clear_cache()
+    _reset_modules()
+
+    import wishful.dynamic.guard_demo as demo
+
+    assert "stable" in demo.__dict__
+    snapshot_before = manager.dynamic_snapshot_path("wishful.dynamic.guard_demo").read_text()
+
+    import pytest
+
+    with pytest.raises(AttributeError):
+        demo.missing_fn()
+
+    # The module namespace and the snapshot survived the failed generation.
+    assert "stable" in demo.__dict__
+    assert "unrelated" not in demo.__dict__
+    snapshot_after = manager.dynamic_snapshot_path("wishful.dynamic.guard_demo").read_text()
+    assert snapshot_after == snapshot_before
+
+
+def test_dynamic_call_on_non_callable_raises(monkeypatch):
+    """Dynamic modules expose functions only: a constant raises at call time."""
+    def fake_generate(module, functions, context, **kwargs):
+        return "ANSWER = 42\n"
+
+    monkeypatch.setattr(loader, "generate_module_code", fake_generate)
+    manager.clear_cache()
+    _reset_modules()
+
+    import wishful.dynamic.const_demo as demo
+
+    import pytest
+
+    with pytest.raises(AttributeError):
+        demo.ANSWER()
+
+
 def test_static_and_dynamic_independent_caches(monkeypatch):
     """Static and dynamic with same module name should have independent behavior."""
     

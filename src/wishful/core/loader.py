@@ -95,7 +95,19 @@ def _resolve_generate_module_code():
 
 
 class DynamicProxyModule(ModuleType):
-    """Module proxy that regenerates the underlying module on each attribute access."""
+    """Module proxy whose public attributes are call-time-regenerating wrappers.
+
+    The attribute contract (intentional, pinned by tests):
+
+    - Accessing any public (non-underscore) attribute returns a fresh callable
+      wrapper and never costs an LLM call; generation happens only when the
+      wrapper is *invoked*, with the real runtime arguments as context.
+    - Consequently ``hasattr(mod, name)`` is True for every public name and
+      ``dir(mod)`` cannot enumerate what the model would generate.
+    - Dynamic modules expose *functions only*. A name the model generates as a
+      non-callable (a constant, say) raises AttributeError at call time — use
+      static mode for modules that carry data attributes.
+    """
 
     _SAFE_ATTRS = {
         "__class__",
@@ -407,7 +419,14 @@ class MagicLoader(importlib.abc.Loader):
         desired = set(ctx.functions or []) | {func_name} | self._declared_symbols(module)
         ctx.functions = sorted(desired)
 
-        source, path = self._generate_and_cache(ctx.functions, ctx)
+        source = self._generate_validated(ctx.functions, ctx)
+        # Same commit-guard as _dynamic_getattr: a generation that failed to
+        # produce the called symbol must not replace the module namespace or the
+        # snapshot — the caller gets AttributeError and the module stays intact.
+        if not _source_defines(source, func_name):
+            raise AttributeError(func_name)
+
+        path = self._write_source(source)
         self._exec_source(source, module, ctx, clear_first=True, file_path=str(path))
 
         target = module.__dict__.get(func_name)
