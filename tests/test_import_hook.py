@@ -1,10 +1,15 @@
 import importlib
 import sys
 
+import pytest
+
 from wishful import regenerate
 from wishful.cache import manager
 from wishful.cache.manager import dynamic_snapshot_path
+from wishful.config import configure
 from wishful.core import loader
+from wishful.llm.client import GenerationError
+from wishful.safety.validator import SecurityError
 
 
 def _reset_modules():
@@ -232,6 +237,89 @@ def test_dynamic_syntax_error_retries_once(monkeypatch):
     assert snap.exists()
     text = snap.read_text()
     assert "def ping" in text
+
+
+# --- U4: cache integrity with safety ON -------------------------------------
+
+
+def test_syntax_retry_works_with_safety_on(monkeypatch):
+    """The regenerate-once retry must fire with the validator enabled (the
+    composition bug: validator used to swallow SyntaxError as ImportError)."""
+    configure(allow_unsafe=False)
+    call_count = {"n": 0}
+
+    def gen(module, functions, context, **kwargs):
+        call_count["n"] += 1
+        if call_count["n"] == 1:
+            return "def broken(:\n    pass\n"
+        return "def foo():\n    return 'ok'\n"
+
+    monkeypatch.setattr(loader, "generate_module_code", gen)
+    manager.clear_cache()
+    _reset_modules()
+
+    from wishful.static.safe_retry import foo
+
+    assert foo() == "ok"
+    assert call_count["n"] == 2
+    cached = manager.read_cached("wishful.static.safe_retry")
+    assert "def foo" in cached
+    assert "broken" not in cached
+
+
+def test_persistent_syntax_error_leaves_no_cache(monkeypatch):
+    """Two malformed generations -> GenerationError, and nothing is cached."""
+    configure(allow_unsafe=False)
+
+    def gen(module, functions, context, **kwargs):
+        return "def broken(:\n    pass\n"
+
+    monkeypatch.setattr(loader, "generate_module_code", gen)
+    manager.clear_cache()
+    _reset_modules()
+
+    with pytest.raises(GenerationError):
+        importlib.import_module("wishful.static.always_broken")
+    assert not manager.has_cached("wishful.static.always_broken")
+
+
+def test_security_violation_not_cached_then_recovers(monkeypatch):
+    """A dangerous generation is never written; a later clean generation works."""
+    configure(allow_unsafe=False)
+    calls = {"n": 0}
+
+    def gen(module, functions, context, **kwargs):
+        calls["n"] += 1
+        if calls["n"] == 1:
+            return "import os\nos.system('echo hi')\ndef foo():\n    return 1\n"
+        return "def foo():\n    return 1\n"
+
+    monkeypatch.setattr(loader, "generate_module_code", gen)
+    manager.clear_cache()
+    _reset_modules()
+
+    with pytest.raises(SecurityError):
+        importlib.import_module("wishful.static.danger")
+    assert not manager.has_cached("wishful.static.danger")
+
+    _reset_modules()
+    from wishful.static.danger import foo
+
+    assert foo() == 1
+    assert calls["n"] == 2
+
+
+def test_cache_hit_revalidates_poisoned_source(monkeypatch):
+    """A poisoned cache file (dangerous code) is rejected at load time."""
+    configure(allow_unsafe=False)
+    manager.write_cached(
+        "wishful.static.poisoned",
+        "import os\nos.system('rm -rf /')\ndef foo():\n    return 1\n",
+    )
+    _reset_modules()
+
+    with pytest.raises(SecurityError):
+        importlib.import_module("wishful.static.poisoned")
 
 
 def test_dynamic_writes_snapshot(monkeypatch):

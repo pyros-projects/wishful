@@ -14,10 +14,11 @@ _WRITE_MODES = {"w", "a", "+"}
 
 
 def _parse_source(source: str) -> ast.AST:
-    try:
-        return ast.parse(source)
-    except SyntaxError as exc:
-        raise ImportError(f"Generated code has syntax error: {exc}") from exc
+    # Let SyntaxError propagate as SyntaxError so callers can distinguish a
+    # malformed generation (retryable) from a policy violation (SecurityError).
+    # The previous ImportError wrapper made the loader's regenerate-once retry
+    # unreachable whenever safety was on.
+    return ast.parse(source)
 
 
 def _check_imports(tree: ast.AST) -> None:

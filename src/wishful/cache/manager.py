@@ -1,10 +1,32 @@
 from __future__ import annotations
 
+import os
 import shutil
+import tempfile
 from pathlib import Path
 from typing import List, Optional
 
 from wishful.config import settings
+
+
+def _atomic_write(path: Path, source: str) -> None:
+    """Write ``source`` to ``path`` atomically (temp file + os.replace).
+
+    A crash or concurrent writer can never leave a torn .py file behind: readers
+    see either the old contents or the complete new ones, never a partial write.
+    """
+    path.parent.mkdir(parents=True, exist_ok=True)
+    fd, tmp = tempfile.mkstemp(dir=str(path.parent), suffix=".tmp")
+    try:
+        with os.fdopen(fd, "w") as handle:
+            handle.write(source)
+        os.replace(tmp, path)
+    except BaseException:
+        try:
+            os.unlink(tmp)
+        except OSError:
+            pass
+        raise
 
 
 def module_path(fullname: str) -> Path:
@@ -38,21 +60,23 @@ def ensure_cache_dir() -> Path:
 def read_cached(fullname: str) -> Optional[str]:
     path = module_path(fullname)
     if path.exists():
-        return path.read_text()
+        text = path.read_text()
+        # An empty (e.g. torn) cache file is a miss, not a valid empty module.
+        if not text.strip():
+            return None
+        return text
     return None
 
 
 def write_cached(fullname: str, source: str) -> Path:
     path = module_path(fullname)
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(source)
+    _atomic_write(path, source)
     return path
 
 
 def write_dynamic_snapshot(fullname: str, source: str) -> Path:
     path = dynamic_snapshot_path(fullname)
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(source)
+    _atomic_write(path, source)
     return path
 
 

@@ -114,13 +114,35 @@ class MagicLoader(importlib.abc.Loader):
         self._maybe_review(source)
 
     def _generate_and_cache(self, functions, context):
+        # Validate BEFORE writing so a failed generation never survives as a
+        # cache entry. A malformed (SyntaxError) generation is retried once; a
+        # policy violation (SecurityError) is raised immediately without caching.
+        last_syntax_exc: SyntaxError | None = None
+        for _ in range(2):
+            source = self._invoke_generator(functions, context)
+            try:
+                validate_code(source, allow_unsafe=settings.allow_unsafe)
+            except SyntaxError as exc:
+                last_syntax_exc = exc
+                logger.warning(
+                    "Generated {} has invalid syntax; regenerating once", self.fullname
+                )
+                continue
+            path = self._write_source(source)
+            logger.debug("generate done fullname={} path={}", self.fullname, path)
+            return source, path
+        raise GenerationError(
+            f"Generated code for {self.fullname} has invalid syntax after a retry"
+        ) from last_syntax_exc
+
+    def _invoke_generator(self, functions, context) -> str:
         logger.info("Generating {}", self.fullname)
         logger.debug(
             "generate start fullname={} mode={} functions={}", self.fullname, self.mode, functions
         )
         with spinner(f"Generating {self.fullname}"):
             gen_fn = _resolve_generate_module_code()
-            source = gen_fn(
+            return gen_fn(
                 self.fullname,
                 functions,
                 context.context,
@@ -128,12 +150,11 @@ class MagicLoader(importlib.abc.Loader):
                 function_output_types=context.function_output_types,
                 mode=self.mode,
             )
+
+    def _write_source(self, source: str):
         if self.mode == "static":
-            path = cache.write_cached(self.fullname, source)
-        else:
-            path = cache.write_dynamic_snapshot(self.fullname, source)
-        logger.debug("generate done fullname={} path={}", self.fullname, path)
-        return source, path
+            return cache.write_cached(self.fullname, source)
+        return cache.write_dynamic_snapshot(self.fullname, source)
 
     def _exec_source(
         self,
