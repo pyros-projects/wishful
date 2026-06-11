@@ -98,7 +98,6 @@ def main() -> None:
         generations=1,
         variants=2,
         mutation_prompt="Keep the behavior identical but make the code concise.",
-        verbose=False,
     )
 
     print("Original fitness:", source_quality(normalize_scores))
