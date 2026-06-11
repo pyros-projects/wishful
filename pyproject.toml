@@ -23,6 +23,21 @@ wishful = "wishful.__main__:main"
 # Examples deliberately import wishful.* mid-file — that import IS the demo.
 "examples/*" = ["E402"]
 
+[tool.pytest.ini_options]
+markers = [
+    "smoke: real-model smoke test, run only with WISHFUL_SMOKE=1 and credentials",
+]
+
+[tool.coverage.run]
+source = ["wishful"]
+# Generated cache modules are exec'd from temp dirs during tests; don't try to
+# measure or report on them.
+omit = ["*/.wishful/*", "*/_dynamic/*"]
+
+[tool.coverage.report]
+# Floor with headroom below the current ~86%; guards against large regressions.
+fail_under = 80
+
 [build-system]
 requires = ["uv_build>=0.11.0,<1.0.0"]
 build-backend = "uv_build"

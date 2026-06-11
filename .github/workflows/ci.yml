@@ -26,7 +26,10 @@ jobs:
       - name: Sync dependencies
         run: uv sync --frozen
 
-      - name: Run tests
+      - name: Run tests with coverage gate
         env:
           WISHFUL_FAKE_LLM: "1"
-        run: uv run pytest -q
+        run: uv run pytest -q --cov=wishful --cov-report=term-missing
+
+      - name: Lint
+        run: uv run ruff check .
