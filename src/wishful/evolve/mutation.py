@@ -11,7 +11,11 @@ from wishful.llm.client import generate_module_code
 
 
 def mutate_with_llm(
-    source: str, mutation_prompt: str, function_name: str, history: List[dict]
+    source: str,
+    mutation_prompt: str,
+    function_name: str,
+    history: List[dict],
+    timeout: float | None = None,
 ) -> str:
     """
     Ask the LLM to create a mutation informed by evolutionary history.
@@ -34,7 +38,10 @@ def mutate_with_llm(
 
     # Use existing LLM infrastructure
     return generate_module_code(
-        module="wishful.evolve._mutation", functions=[function_name], context=context
+        module="wishful.evolve._mutation",
+        functions=[function_name],
+        context=context,
+        timeout=timeout,
     )
 
 

@@ -865,10 +865,23 @@ class TestEvolveContract:
 
             evolve(fn, fitness=lambda f: 1.0, generations=1, variants=1, verbose=False)
 
-    def test_original_fitness_exception_does_not_crash(self):
+    @staticmethod
+    def _stub_mutation(monkeypatch, source="def score(n):\n    return n + 1\n"):
+        """Replace the LLM mutation with a deterministic stub.
+
+        Without this these tests call the real provider (conftest never forces
+        WISHFUL_FAKE_LLM), so a populated .env makes them spend money and flake.
+        """
+        evolver_module = importlib.import_module("wishful.evolve.evolver")
+        monkeypatch.setattr(
+            evolver_module, "mutate_with_llm", lambda **kwargs: source
+        )
+
+    def test_original_fitness_exception_does_not_crash(self, monkeypatch):
         """A fitness() that raises on the original is recorded, not propagated."""
         from wishful import evolve
 
+        self._stub_mutation(monkeypatch)
         fn = self._identity_source()
         calls = {"n": 0}
 
@@ -885,13 +898,14 @@ class TestEvolveContract:
         )
         assert callable(result)
 
-    def test_slow_fitness_is_bounded_and_loop_continues(self):
+    def test_slow_fitness_is_bounded_and_loop_continues(self, monkeypatch):
         """A fitness() that exceeds the per-variant timeout fails that variant
         without hanging the run."""
         import time
 
         from wishful import evolve
 
+        self._stub_mutation(monkeypatch)
         fn = self._identity_source()
 
         def slow_fitness(f):
@@ -908,10 +922,11 @@ class TestEvolveContract:
                 timeout_per_variant=0.2,
             )
 
-    def test_systemexit_in_test_is_contained(self):
+    def test_systemexit_in_test_is_contained(self, monkeypatch):
         """A candidate test() that calls sys.exit must not kill the host."""
         from wishful import evolve
 
+        self._stub_mutation(monkeypatch)
         fn = self._identity_source()
 
         def exiting_test(f):
@@ -925,3 +940,31 @@ class TestEvolveContract:
                 generations=1,
                 variants=1,
             )
+
+    def test_mutation_call_is_bounded_by_per_variant_timeout(self, monkeypatch):
+        """The LLM mutation call must inherit the per-variant budget, not the
+        global 300s request timeout — otherwise a 'timed-out' variant's daemon
+        thread keeps the HTTP call alive far past timeout_per_variant."""
+        from wishful import evolve
+
+        mutation_module = importlib.import_module("wishful.evolve.mutation")
+        captured = {}
+
+        def fake_generate(module, functions, context, **kwargs):
+            captured["timeout"] = kwargs.get("timeout")
+            return "def score(n):\n    return n + 1\n"
+
+        monkeypatch.setattr(mutation_module, "generate_module_code", fake_generate)
+        fn = self._identity_source()
+
+        evolve(
+            fn,
+            fitness=lambda f: 1.0,
+            test=lambda f: True,
+            generations=1,
+            variants=1,
+            timeout_per_variant=7.0,
+        )
+
+        assert captured["timeout"] is not None
+        assert captured["timeout"] <= 7.0

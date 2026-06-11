@@ -50,15 +50,21 @@ def generate_module_code(
     type_schemas: dict[str, str] | None = None,
     function_output_types: dict[str, str] | None = None,
     mode: str | None = None,
+    timeout: float | None = None,
 ) -> str:
-    """Call the LLM (or fake stub) to generate module source code (sync version)."""
+    """Call the LLM (or fake stub) to generate module source code (sync version).
+
+    ``timeout`` overrides ``settings.request_timeout`` for this call only — evolve
+    passes the per-variant budget so a bounded mutation cannot outlive it.
+    """
 
     if _is_fake_mode():
         return _fake_response(functions)
 
     for _ in range(2):  # initial attempt + one retry on empty content
         response = _call_llm(
-            module, functions, context, type_schemas, function_output_types, mode
+            module, functions, context, type_schemas, function_output_types, mode,
+            timeout=timeout,
         )
         try:
             content = _extract_content(response)
@@ -114,20 +120,21 @@ def _call_llm(
     type_schemas: dict[str, str] | None = None,
     function_output_types: dict[str, str] | None = None,
     mode: str | None = None,
+    timeout: float | None = None,
 ):
     """Synchronous LLM call."""
     messages = build_messages(
         module, functions, context, type_schemas, function_output_types, mode
     )
     _log_llm_call(module, mode, functions, context, type_schemas, function_output_types, messages)
-    
+
     try:
         return litellm.completion(
             model=settings.model,
             messages=messages,
             temperature=settings.temperature,
             max_tokens=settings.max_tokens,
-            timeout=settings.request_timeout,
+            timeout=settings.request_timeout if timeout is None else timeout,
         )
     except Exception as exc:  # pragma: no cover - network path not executed in tests
         raise GenerationError(f"LLM call failed: {exc}") from exc

@@ -5,6 +5,7 @@ from __future__ import annotations
 import textwrap
 import threading
 from collections.abc import Callable
+from functools import partial
 from typing import Any
 
 from wishful.config import settings
@@ -121,12 +122,21 @@ def evolve(
             mutation_history = (
                 history.get_context_for_llm(limit=history_limit) if keep_history else []
             )
+            # Cap the LLM call itself at the per-variant budget. _call_user runs it
+            # on a daemon thread it cannot cancel, so without this bound a "timed
+            # out" mutation keeps its HTTP request alive up to settings.request_timeout
+            # (300s) long after the loop moved on. partial() freezes the per-iteration
+            # values now, so an abandoned thread can't read state a later iteration
+            # mutated.
+            mutate_timeout = min(timeout_per_variant, settings.request_timeout)
             ok, candidate_source, mutate_error = _call_user(
-                lambda: mutate_with_llm(
+                partial(
+                    mutate_with_llm,
                     source=best_source,
                     mutation_prompt=mutation_prompt,
                     function_name=function_name,
                     history=mutation_history,
+                    timeout=mutate_timeout,
                 ),
                 timeout_per_variant,
             )
