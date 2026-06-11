@@ -11,6 +11,7 @@ wheels/
 .magic/
 .pytest_cache/
 coverage.xml
+coverage.json
 .coverage
 .internal/
 .wishful/

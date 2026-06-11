@@ -8,8 +8,8 @@
   <a href="https://badge.fury.io/py/wishful"><img src="https://badge.fury.io/py/wishful.svg" alt="PyPI version"></a>
   <a href="https://www.python.org/downloads/"><img src="https://img.shields.io/badge/python-3.12+-blue.svg" alt="Python 3.12+"></a>
   <a href="https://opensource.org/licenses/MIT"><img src="https://img.shields.io/badge/License-MIT-yellow.svg" alt="License: MIT"></a>
-  <a href="https://github.com/pyros-projects/wishful"><img src="https://img.shields.io/badge/tests-154%20passed-brightgreen.svg" alt="Tests"></a>
-  <a href="https://github.com/pyros-projects/wishful"><img src="https://img.shields.io/badge/coverage-78%25-green.svg" alt="Coverage"></a>
+  <a href="https://github.com/pyros-projects/wishful"><img src="https://img.shields.io/badge/tests-263%20passed-brightgreen.svg" alt="Tests"></a>
+  <a href="https://github.com/pyros-projects/wishful"><img src="https://img.shields.io/badge/coverage-86%25-green.svg" alt="Coverage"></a>
   <a href="https://github.com/astral-sh/ruff"><img src="https://img.shields.io/badge/code%20style-ruff-000000.svg" alt="Code style: ruff"></a>
 </p>
 
@@ -337,6 +337,8 @@ wishful.clear_cache()
 
 **CLI**: `wishful inspect`, `wishful clear`, `wishful regen <module>`
 
+`wishful` is a real console script (installed via `pip install wishful`), but `python -m wishful inspect|clear|regen <module>` works identically. Every command accepts `--json` for machine-readable output, and exits `0` on success, `1` on error, `2` on a usage mistake.
+
 The cache is just regular Python files in `.wishful/`. Want to tweak the generated code? Edit it directly. It's your wish, after all.
 
 ---
@@ -358,7 +360,8 @@ wishful.configure(
     max_tokens=8000,               # Maximum LLM response tokens (default: 4096)
     debug=True,                    # Enable debug logging (default: False)
     log_level="INFO",              # Logging level: DEBUG, INFO, WARNING, ERROR (default: WARNING)
-    log_to_file=True,              # Write logs to cache_dir/_logs/ (default: True)
+    log_to_file=True,              # Write logs to cache_dir/_logs/ (default: False, opt-in)
+    request_timeout=120,           # Per-request LLM timeout in seconds (default: 300)
     system_prompt="Custom prompt", # Override the system prompt for LLM (advanced)
 )
 
@@ -381,14 +384,16 @@ _Your wish, your rules._
 | `max_tokens` | `int` | `4096` | Maximum tokens for LLM response |
 | `debug` | `bool` | `False` | Enable debug mode (sets log_level to DEBUG) |
 | `log_level` | `str` | `"WARNING"` | Logging level (DEBUG, INFO, WARNING, ERROR) |
-| `log_to_file` | `bool` | `True` | Write logs to `{cache_dir}/_logs/` |
+| `log_to_file` | `bool` | `False` | Write logs to `{cache_dir}/_logs/` (opt-in) |
+| `request_timeout` | `float` | `300` | Per-request LLM timeout in seconds |
 | `system_prompt` | `str` | _(see source)_ | Custom system prompt for LLM (advanced) |
 
 **Environment Variables:**
 
 All settings can also be configured via environment variables:
 
-- `WISHFUL_MODEL` or `DEFAULT_MODEL` - LLM model identifier
+- `WISHFUL_MODEL` - LLM model identifier; **takes precedence over** `DEFAULT_MODEL`
+- `DEFAULT_MODEL` - fallback LLM model identifier when `WISHFUL_MODEL` is unset
 - `WISHFUL_CACHE_DIR` - Cache directory path
 - `WISHFUL_REVIEW` - Set to `"1"` to enable review mode
 - `WISHFUL_DEBUG` - Set to `"1"` to enable debug mode
@@ -396,9 +401,10 @@ All settings can also be configured via environment variables:
 - `WISHFUL_SPINNER` - Set to `"0"` to disable spinner
 - `WISHFUL_MAX_TOKENS` - Maximum tokens (integer)
 - `WISHFUL_TEMPERATURE` - Sampling temperature (float)
+- `WISHFUL_REQUEST_TIMEOUT` - Per-request LLM timeout in seconds (float, default 300)
 - `WISHFUL_CONTEXT_RADIUS` - Context lines around imports and call sites (integer)
 - `WISHFUL_LOG_LEVEL` - Logging level (DEBUG, INFO, WARNING, ERROR)
-- `WISHFUL_LOG_TO_FILE` - Set to `"0"` to disable file logging
+- `WISHFUL_LOG_TO_FILE` - File logging is **off by default**; set to `"1"` to enable
 - `WISHFUL_SYSTEM_PROMPT` - Custom system prompt
 - `WISHFUL_FAKE_LLM` - Set to `"1"` for deterministic stub generation (testing)
 
@@ -420,7 +426,7 @@ Need deterministic, offline behavior? Set `WISHFUL_FAKE_LLM=1` and wishful gener
 
 ```bash
 export WISHFUL_FAKE_LLM=1
-python my_tests.py  # No API calls, just predictable stubs
+uv run python my_tests.py  # No API calls, just predictable stubs
 ```
 
 ---
@@ -529,6 +535,8 @@ WISHFUL_FAKE_LLM=1 uv run python examples/00_quick_start.py
 
 # Run with real LLM (requires API keys)
 uv run python examples/00_quick_start.py
+
+# 15 examples ship in examples/ (00_quick_start.py … 14_evolve.py)
 ```
 
 ### Adding Dependencies
@@ -552,19 +560,33 @@ wishful/
 │   ├── __init__.py       # Public API
 │   ├── __main__.py       # CLI interface
 │   ├── config.py         # Configuration
+│   ├── exceptions.py     # WishfulError base + exception hierarchy
+│   ├── logging.py        # Logging citizenship (loguru)
+│   ├── ui.py             # Rich spinner / progress UI
 │   ├── cache/            # Cache management
 │   ├── core/             # Import hooks & discovery
 │   ├── llm/              # LLM integration (sync + async)
 │   ├── types/            # Type registry system
 │   ├── explore/          # Multi-variant generation & selection
+│   ├── evolve/           # Generational evolution of functions
 │   └── safety/           # Safety validation
-├── tests/                # Test suite (112 tests)
-├── examples/             # Usage examples
-│   ├── 07_typed_outputs.py    # Type registry showcase
-│   ├── 08_dynamic_vs_static.py # Static vs dynamic modes
-│   ├── 09_context_shenanigans.py # Context discovery
-│   ├── 12_explore.py          # Multi-variant exploration
-│   └── 13_explore_advanced.py # LLM-as-judge, self-improving loops
+├── tests/                # Test suite (261 tests)
+├── examples/             # 15 usage examples
+│   ├── 00_quick_start.py
+│   ├── 01_json_yaml.py
+│   ├── 02_web_scraping.py
+│   ├── 03_data_validation.py
+│   ├── 04_format_conversion.py
+│   ├── 05_api_client.py
+│   ├── 06_omg_why.py
+│   ├── 07_typed_outputs.py         # Type registry showcase
+│   ├── 08_dynamic_vs_static.py     # Static vs dynamic modes
+│   ├── 09_context_shenanigans.py   # Context discovery
+│   ├── 10_cosmic_horror_line_by_line.py
+│   ├── 11_logging.py
+│   ├── 12_explore.py               # Multi-variant exploration
+│   ├── 13_explore_advanced.py      # LLM-as-judge, self-improving loops
+│   └── 14_evolve.py                # Generational evolution
 └── pyproject.toml        # Project config
 ```
 

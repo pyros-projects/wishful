@@ -1,13 +1,20 @@
 ---
 title: CLI
-description: Small-but-handy commands baked into `python -m wishful`.
+description: Small-but-handy commands available as `wishful` or `python -m wishful`.
 ---
 
-All commands should be run with `uv run` in this repo:
+`wishful` is a real console script (installed with the package), and
+`python -m wishful` is the equivalent module form. Inside this repo, run everything
+through `uv run`:
 
 ```bash
 uv run python -m wishful --help
+# or, once installed: wishful --help
 ```
+
+Every subcommand accepts `--json` for machine-readable output, and the CLI exits
+`0` on success, `1` on a runtime error (e.g. an invalid module name), and `2` on a
+usage mistake. `wishful --version` prints the installed version.
 
 ### Inspect cache
 
@@ -40,5 +47,6 @@ Removes the cached module so the next import triggers fresh generation.
 _Small but mighty._
 
 - These CLI helpers mirror the Python API: `inspect_cache`, `clear_cache`, `regenerate`.
+- Add `--json` to any command to script against it; exit codes are `0`/`1`/`2`.
 - Cache paths strip both `static` and `dynamic` prefixes, so dynamic and static share the same cache file.
-- Logs live under `<cache_dir>/_logs/`; clearing the cache nukes them too. (No survivors.)
+- When file logging is enabled, logs live under `<cache_dir>/_logs/`; clearing the cache nukes them too. (No survivors.)

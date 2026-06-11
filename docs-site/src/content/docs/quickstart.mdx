@@ -32,7 +32,8 @@ export AZURE_API_VERSION=2025-04-01-preview
 export DEFAULT_MODEL=azure/gpt-4.1
 ```
 
-You can also set `WISHFUL_MODEL` instead of `DEFAULT_MODEL` if you prefer.
+You can also set `WISHFUL_MODEL` instead of `DEFAULT_MODEL`. If both are set, `WISHFUL_MODEL`
+takes precedence — `DEFAULT_MODEL` is only the fallback.
 
 ## 3) Your first wish
 
@@ -61,7 +62,7 @@ For CI, demos, or offline experiments, flip on stubbed generation:
 
 ```bash
 export WISHFUL_FAKE_LLM=1
-python your_script.py
+uv run python your_script.py
 ```
 
 In fake mode, wishful returns deterministic stub implementations instead of

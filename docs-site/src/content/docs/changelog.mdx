@@ -5,6 +5,54 @@ description: Notable changes to wishful.
 
 All notable changes to wishful will be documented here. Follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) and [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.0] - 2026-06-11
+
+### Added
+
+#### 🧬 Evolve
+- **`wishful.evolve()`**: generational improvement of a function — keeps a history of prior attempts, scores, and failures, then feeds that history into the next mutation prompt. Returns a function carrying `__wishful_source__` and `__wishful_evolution__`. New `EvolutionError`.
+
+#### 🖥️ CLI
+- **Real `wishful` console script** (`[project.scripts]`) alongside `python -m wishful`; both are equivalent entry points.
+- **`--json`** output on every subcommand for machine-readable results.
+- **`--version`** flag.
+- **Documented exit codes**: `0` success, `1` runtime error, `2` usage error.
+
+#### ⚙️ Configuration
+- **`request_timeout`** setting (env `WISHFUL_REQUEST_TIMEOUT`, default `300`s): per-request LLM timeout, applied at import time, with an empty-content retry.
+- **Model precedence clarified**: `WISHFUL_MODEL` now takes precedence over `DEFAULT_MODEL` (the wishful-specific var wins; `DEFAULT_MODEL` is the fallback). Built-in default remains `"azure/gpt-4.1"`.
+
+#### 🪵 Logging citizenship
+- **`log_to_file` now defaults to `False`** (opt-in via `WISHFUL_LOG_TO_FILE=1`): a bare `import wishful` no longer creates files in your CWD.
+- loguru-based logging with `log_level` control.
+
+#### 🧱 Errors
+- **`WishfulError` base exception**: `SecurityError`, `GenerationError`, `ExplorationError`, and `EvolutionError` now derive from it.
+
+### Changed
+
+#### 🛡️ Security / Validator
+- Hardened safety validator, framed honestly as **"defense in depth, not a sandbox"**: AST scan blocks forbidden imports/calls, `__builtins__`/`globals()`/`vars()` gadget access, write-mode `open()`, and system calls through aliases. The same scan re-runs on cache load, so tampered `.wishful/` files are re-checked.
+
+#### 🗄️ Cache
+- **Cache integrity + namespacing**: `static` and `dynamic` prefixes map to the same cache file; cached sources are re-validated on load.
+
+#### 🔍 Review gate
+- **Review-gate ordering + headless guard**: review happens before execution, with a guard for non-interactive environments.
+
+#### 🎨 Type Registry
+- Type-registry fixes for serialization and output-type binding.
+
+#### 📦 Versioning
+- **`__version__` now derives from installed package metadata** (`importlib.metadata.version`) instead of being hardcoded.
+
+### Dependencies
+- Refreshed: `litellm`, `rich`, `python-dotenv`, `pydantic`.
+- Added `loguru` and `nest-asyncio`.
+- Removed `pyglove`.
+
+---
+
 ## [0.2.0] - 2024-11-24
 
 ### Added
@@ -93,5 +141,6 @@ All notable changes to wishful will be documented here. Follows [Keep a Changelo
 
 ---
 
+[0.3.0]: https://github.com/pyros-projects/wishful/compare/v0.2.4...v0.3.0
 [0.2.0]: https://github.com/pyros-projects/wishful/compare/v0.1.6...v0.2.0
 [0.1.6]: https://github.com/pyros-projects/wishful/releases/tag/v0.1.6
