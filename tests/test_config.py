@@ -13,7 +13,7 @@ def test_default_settings():
     assert s.debug is False
     assert s.allow_unsafe is False
     assert s.spinner is True
-    assert s.max_tokens == 4096
+    assert s.max_tokens == 16384
     assert s.temperature == 1
     assert "Python code generator" in s.system_prompt
 
