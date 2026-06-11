@@ -17,6 +17,80 @@ def make_async_fake(sync_fn):
     return async_wrapper
 
 
+class TestBoundedCandidates:
+    """User callables are time-bounded and contained (plan R4).
+
+    A hanging or exiting candidate is recorded as a variant failure; the
+    explore run completes and the host process survives.
+    """
+
+    @staticmethod
+    def _passing_generate(module, functions, context, **kwargs):
+        return "def f():\n    return 1\n"
+
+    def test_hanging_test_recorded_as_timeout_failure(self, monkeypatch):
+        import time
+
+        monkeypatch.setattr(
+            explorer_module, "agenerate_module_code", make_async_fake(self._passing_generate)
+        )
+
+        def hanging_test(fn):
+            time.sleep(5)  # well past the per-variant budget; daemon thread ends on its own
+            return True
+
+        with pytest.raises(ExplorationError) as exc_info:
+            explore(
+                "wishful.static.bounded.f",
+                variants=1,
+                test=hanging_test,
+                timeout_per_variant=0.3,
+                verbose=False,
+                save_results=False,
+            )
+        assert any("timeout" in failure for failure in exc_info.value.failures)
+
+    def test_sys_exit_in_test_does_not_kill_host(self, monkeypatch):
+        monkeypatch.setattr(
+            explorer_module, "agenerate_module_code", make_async_fake(self._passing_generate)
+        )
+
+        def exiting_test(fn):
+            raise SystemExit(3)
+
+        with pytest.raises(ExplorationError) as exc_info:
+            explore(
+                "wishful.static.bounded.f",
+                variants=1,
+                test=exiting_test,
+                timeout_per_variant=2.0,
+                verbose=False,
+                save_results=False,
+            )
+        # The host is alive (we got an ExplorationError, not a process exit)
+        # and the failure names the contained exception.
+        assert any("SystemExit" in failure for failure in exc_info.value.failures)
+
+    def test_sys_exit_in_benchmark_fails_variant(self, monkeypatch):
+        monkeypatch.setattr(
+            explorer_module, "agenerate_module_code", make_async_fake(self._passing_generate)
+        )
+
+        def exiting_benchmark(fn):
+            raise SystemExit(1)
+
+        with pytest.raises(ExplorationError):
+            explore(
+                "wishful.static.bounded.f",
+                variants=1,
+                test=lambda fn: True,
+                benchmark=exiting_benchmark,
+                timeout_per_variant=2.0,
+                verbose=False,
+                save_results=False,
+            )
+
+
 class TestWinnerMerge:
     """Caching a winner must not clobber other symbols in the module."""
 

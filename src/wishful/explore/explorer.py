@@ -10,10 +10,12 @@ import re
 import sys
 import time
 import warnings
+from functools import partial
 from typing import Callable, List, Literal, Optional, Tuple, Union
 
 from wishful.cache.manager import read_cached, write_cached
 from wishful.config import settings
+from wishful.core.execution import run_user_callable
 from wishful.explore.exceptions import ExplorationError
 from wishful.logging import logger
 from wishful.explore.progress import (
@@ -402,21 +404,30 @@ async def _generate_and_evaluate_async(
             # Attach source to function so benchmark can access it
             fn.__wishful_source__ = source  # type: ignore[attr-defined]  # dynamic marker
 
-            # Test/benchmark
-            try:
-                passed = test is None or test(fn)
-                score = benchmark(fn) if benchmark and passed else None
-                progress.record_test_result(i, passed, score)
-                if display:
-                    display.update()
+            # Test/benchmark — user callables run on a bounded worker thread
+            # (run_user_callable) so a hanging candidate can't stall explore and
+            # a SystemExit inside one can't kill the host. Timeouts and raised
+            # BaseExceptions are recorded as variant failures; the loop continues.
+            if test is None:
+                passed, error = True, None
+            else:
+                ok, value, error = run_user_callable(partial(test, fn), timeout)
+                passed = bool(ok and value)
+                if ok and not value:
+                    error = "test returned False"
 
-                if passed:
-                    results.append((fn, source, passed, score))
+            score = None
+            if passed and benchmark:
+                ok, score, bench_error = run_user_callable(partial(benchmark, fn), timeout)
+                if not ok:
+                    passed, score, error = False, None, bench_error
 
-            except Exception as e:
-                progress.record_test_result(i, False, error=str(e))
-                if display:
-                    display.update()
+            progress.record_test_result(i, passed, score, error=error)
+            if display:
+                display.update()
+
+            if passed:
+                results.append((fn, source, passed, score))
 
         except Exception as e:
             progress.record_compile_error(i, str(e))

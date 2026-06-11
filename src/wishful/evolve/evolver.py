@@ -3,45 +3,16 @@
 from __future__ import annotations
 
 import textwrap
-import threading
 from collections.abc import Callable
 from functools import partial
 from typing import Any
 
 from wishful.config import settings
+from wishful.core.execution import run_user_callable as _call_user
 from wishful.evolve.exceptions import EvolutionError
 from wishful.evolve.history import EvolutionHistory, GenerationRecord
 from wishful.evolve.mutation import get_function_source, mutate_with_llm
 from wishful.safety.validator import validate_code
-
-
-def _call_user(func: Callable[[], Any], timeout: float) -> tuple[bool, Any, str | None]:
-    """Run an untrusted user callable under a per-variant timeout.
-
-    Returns ``(ok, value, error)``. A timeout or any BaseException (including
-    SystemExit) is reported as a failure rather than propagating — the evolve
-    loop must survive a runaway or exiting candidate. CPython cannot cancel a
-    running thread, so a timed-out callable keeps running, but the worker is a
-    **daemon** thread: it is abandoned without leaking into interpreter shutdown
-    or accumulating non-daemon threads across many timeouts.
-    """
-    outcome: dict[str, Any] = {}
-
-    def _runner() -> None:
-        try:
-            outcome["value"] = func()
-        except BaseException as exc:  # noqa: BLE001 - SystemExit/etc. must be contained
-            outcome["error"] = exc
-
-    worker = threading.Thread(target=_runner, name="wishful-evolve", daemon=True)
-    worker.start()
-    worker.join(timeout)
-    if worker.is_alive():
-        return False, None, f"exceeded {timeout}s timeout"
-    if "error" in outcome:
-        exc = outcome["error"]
-        return False, None, f"{type(exc).__name__}: {exc}"
-    return True, outcome.get("value"), None
 
 
 def evolve(
