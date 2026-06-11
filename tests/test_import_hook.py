@@ -1,5 +1,6 @@
 import importlib
 import sys
+import types
 
 import pytest
 
@@ -404,6 +405,113 @@ def test_generation_lacking_symbol_does_not_clobber_cache(monkeypatch):
     # The discarded regeneration must not have overwritten the cache or module.
     assert manager.read_cached("wishful.static.stubborn") == cached_before
     assert mod.foo() == "foo"
+
+
+# --- U8: review gate ordering + TTY guard -----------------------------------
+
+
+def test_review_rejection_blocks_execution_before_it_runs(monkeypatch):
+    """Rejection must raise before the module body executes (the bug: review
+    ran AFTER exec, so the code had already run)."""
+    configure(review=True)
+    monkeypatch.setattr(loader, "_is_promptable", lambda: True)
+    monkeypatch.setattr("builtins.input", lambda prompt="": "n")
+
+    def gen(module, functions, context, **kwargs):
+        # If this body ever executes, it raises RuntimeError, not ImportError.
+        return "raise RuntimeError('top-level executed')\n"
+
+    monkeypatch.setattr(loader, "generate_module_code", gen)
+    manager.clear_cache()
+    _reset_modules()
+
+    with pytest.raises(ImportError):  # rejection, NOT RuntimeError
+        importlib.import_module("wishful.static.reviewed_reject")
+    assert not manager.has_cached("wishful.static.reviewed_reject")
+
+
+def test_review_approval_executes(monkeypatch):
+    configure(review=True)
+    monkeypatch.setattr(loader, "_is_promptable", lambda: True)
+    monkeypatch.setattr("builtins.input", lambda prompt="": "y")
+
+    def gen(module, functions, context, **kwargs):
+        return "def foo():\n    return 'ok'\n"
+
+    monkeypatch.setattr(loader, "generate_module_code", gen)
+    manager.clear_cache()
+    _reset_modules()
+
+    from wishful.static.reviewed_ok import foo
+
+    assert foo() == "ok"
+
+
+def test_review_non_interactive_raises_before_generation(monkeypatch):
+    """Headless + review=True must raise an actionable ImportError and never
+    pay for an LLM call."""
+    configure(review=True)
+    monkeypatch.setattr(loader, "_is_promptable", lambda: False)
+    calls = {"n": 0}
+
+    def gen(module, functions, context, **kwargs):
+        calls["n"] += 1
+        return "def foo():\n    return 1\n"
+
+    monkeypatch.setattr(loader, "generate_module_code", gen)
+    manager.clear_cache()
+    _reset_modules()
+
+    with pytest.raises(ImportError, match="interactive"):
+        importlib.import_module("wishful.static.headless_review")
+    assert calls["n"] == 0
+
+
+def test_review_eof_is_treated_as_rejection(monkeypatch):
+    configure(review=True)
+    monkeypatch.setattr(loader, "_is_promptable", lambda: True)
+
+    def raise_eof(prompt=""):
+        raise EOFError()
+
+    monkeypatch.setattr("builtins.input", raise_eof)
+
+    def gen(module, functions, context, **kwargs):
+        return "def foo():\n    return 1\n"
+
+    monkeypatch.setattr(loader, "generate_module_code", gen)
+    manager.clear_cache()
+    _reset_modules()
+
+    with pytest.raises(ImportError):
+        importlib.import_module("wishful.static.eof_review")
+
+
+def test_review_gates_regeneration_path(monkeypatch):
+    """A new-attribute regeneration also goes through the review prompt."""
+    configure(review=True)
+    monkeypatch.setattr(loader, "_is_promptable", lambda: True)
+    monkeypatch.setattr("builtins.input", lambda prompt="": "y")
+
+    def gen(module, functions, context, **kwargs):
+        body = [f"def {n}():\n    return '{n}'\n" for n in sorted(set(functions))]
+        return "\n".join(body)
+
+    monkeypatch.setattr(loader, "generate_module_code", gen)
+    manager.clear_cache()
+    _reset_modules()
+
+    from wishful.static.regrev import foo
+
+    assert foo() == "foo"
+    mod = sys.modules["wishful.static.regrev"]
+    assert mod.bar() == "bar"  # regen path prompted (approved) then executed
+
+
+def test_ipykernel_counts_as_promptable(monkeypatch):
+    """Notebooks route input() to the frontend even though stdin isn't a TTY."""
+    monkeypatch.setitem(sys.modules, "ipykernel", types.ModuleType("ipykernel"))
+    assert loader._is_promptable() is True
 
 
 def test_dynamic_writes_snapshot(monkeypatch):

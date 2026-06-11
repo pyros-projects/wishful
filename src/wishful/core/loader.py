@@ -8,6 +8,28 @@ import sys
 from types import ModuleType
 
 
+def _is_promptable() -> bool:
+    """True when ``input()`` can reach a human: a real TTY or an interactive kernel.
+
+    Jupyter/IPython route ``input()`` to the notebook frontend even though stdin
+    is not a TTY, so they count as promptable. CI, pytest capture, and /dev/null
+    do not — review must fail closed there rather than hang.
+    """
+    try:
+        if sys.stdin is not None and sys.stdin.isatty():
+            return True
+    except (ValueError, AttributeError):
+        pass
+    if "ipykernel" in sys.modules:
+        return True
+    try:
+        from IPython import get_ipython  # type: ignore
+    except Exception:
+        return False
+    shell = get_ipython()
+    return shell is not None and shell.__class__.__name__ == "ZMQInteractiveShell"
+
+
 def _source_defines(source: str, name: str) -> bool:
     """Return True if ``source`` defines ``name`` at module top level.
 
@@ -133,14 +155,12 @@ class MagicLoader(importlib.abc.Loader):
         if self.mode == "dynamic":
             self._attach_dynamic_proxy(module)
 
+        # _exec_source runs validate -> review -> exec, so approval gates real
+        # execution on every path (including the syntax-retry and regen paths).
         self._exec_source(source, module, context, file_path=file_path)
         self._ensure_symbols(module, context, from_cache)
-        if self.mode == "dynamic":
-            self._maybe_review(source)
-            return
-
-        self._attach_dynamic_getattr(module)
-        self._maybe_review(source)
+        if self.mode != "dynamic":
+            self._attach_dynamic_getattr(module)
 
     def _generate_and_cache(self, functions, context):
         source = self._generate_validated(functions, context)
@@ -168,7 +188,18 @@ class MagicLoader(importlib.abc.Loader):
             f"Generated code for {self.fullname} has invalid syntax after a retry"
         ) from last_syntax_exc
 
+    def _ensure_review_possible(self) -> None:
+        """Fail closed before any LLM call when review is on but stdin can't prompt."""
+        if settings.review and not _is_promptable():
+            raise ImportError(
+                "review=True requires an interactive terminal or notebook, but "
+                "stdin is not interactive. Use configure(review=False) or "
+                "WISHFUL_REVIEW=0 for headless/CI runs."
+            )
+
     def _invoke_generator(self, functions, context) -> str:
+        # Refuse to spend an LLM call we'd only reject at the review prompt.
+        self._ensure_review_possible()
         logger.info("Generating {}", self.fullname)
         logger.debug(
             "generate start fullname={} mode={} functions={}", self.fullname, self.mode, functions
@@ -198,21 +229,19 @@ class MagicLoader(importlib.abc.Loader):
         file_path: str | None = None,
         allow_retry: bool = True,
     ) -> None:
+        filename = file_path or str(cache.module_path(self.fullname))
         try:
+            # Compile first so a malformed generation is caught uniformly,
+            # whether or not safety validation is enabled, then run the safety
+            # checks.
+            code_obj = compile(source, filename, "exec")
             validate_code(source, allow_unsafe=settings.allow_unsafe)
-            preserved_loader = module.__dict__.get("_wishful_loader")
-            if clear_first:
-                module.__dict__.clear()
-                if preserved_loader is not None:
-                    module.__dict__["_wishful_loader"] = preserved_loader
-            module.__file__ = file_path or str(cache.module_path(self.fullname))
-            module.__package__ = self.fullname.rpartition('.')[0]
-            exec(compile(source, module.__file__, "exec"), module.__dict__)
         except SyntaxError:
             logger.warning("SyntaxError while loading {}; retrying once", self.fullname)
             if not allow_retry:
                 raise
-            # Regenerate once on syntax errors
+            # Regenerate once on syntax errors, then run the new source through
+            # the full compile -> validate -> review -> exec gate.
             if self.mode == "static":
                 cache.delete_cached(self.fullname)
             source2, path2 = self._generate_and_cache(context.functions, context)
@@ -224,6 +253,19 @@ class MagicLoader(importlib.abc.Loader):
                 file_path=str(path2),
                 allow_retry=False,
             )
+            return
+
+        # Validated. Ask for approval BEFORE executing so the gate actually
+        # guards execution (it used to run after exec — the code had already run).
+        self._maybe_review(source)
+        preserved_loader = module.__dict__.get("_wishful_loader")
+        if clear_first:
+            module.__dict__.clear()
+            if preserved_loader is not None:
+                module.__dict__["_wishful_loader"] = preserved_loader
+        module.__file__ = filename
+        module.__package__ = self.fullname.rpartition('.')[0]
+        exec(code_obj, module.__dict__)
 
     def _attach_dynamic_getattr(self, module: ModuleType) -> None:
         def _dynamic_getattr(name: str):
@@ -300,8 +342,12 @@ class MagicLoader(importlib.abc.Loader):
     def _maybe_review(self, source: str) -> None:
         if not settings.review:
             return
+        self._ensure_review_possible()
         print(f"Generated code for {self.fullname}:\n{source}\n")
-        answer = input("Run this code? [y/N]: ")
+        try:
+            answer = input("Run this code? [y/N]: ")
+        except EOFError:
+            answer = "n"  # fail closed: no input means no approval
         if answer.lower().strip() not in {"y", "yes"}:
             cache.delete_cached(self.fullname)
             raise ImportError("User rejected generated code.")
