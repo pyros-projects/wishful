@@ -131,3 +131,53 @@ class TestCacheHelpers:
         manager.write_cached("wishful.static.listme", "def f():\n    return 1\n")
         listed = [str(p) for p in manager.inspect_cache()]
         assert any("listme" in p for p in listed)
+
+
+def _race_writer(cache_dir: str, marker: str, rounds: int) -> None:
+    """Child-process body for the cross-process write race (module-level for spawn)."""
+    import wishful
+
+    wishful.configure(cache_dir=cache_dir)
+    from wishful.cache import manager as child_manager
+
+    payload = f"def f():\n    return {marker!r}\n" + ("# pad\n" * 2000)
+    for _ in range(rounds):
+        child_manager.write_cached("wishful.static.race_target", payload)
+
+
+class TestCrossProcessAtomicity:
+    """Two writer processes; readers never see a torn file (review testing gap)."""
+
+    def test_concurrent_writers_never_tear(self, tmp_path):
+        import multiprocessing
+
+        import wishful
+        from wishful.cache import manager
+
+        cache_dir = str(tmp_path / ".wishful")
+        wishful.configure(cache_dir=cache_dir)
+
+        payloads = {
+            m: f"def f():\n    return {m!r}\n" + ("# pad\n" * 2000) for m in ("a", "b")
+        }
+
+        ctx = multiprocessing.get_context("spawn")
+        writers = [
+            ctx.Process(target=_race_writer, args=(cache_dir, m, 40)) for m in ("a", "b")
+        ]
+        for w in writers:
+            w.start()
+
+        torn = []
+        try:
+            while any(w.is_alive() for w in writers):
+                text = manager.read_cached("wishful.static.race_target")
+                if text is not None and text not in payloads.values():
+                    torn.append(text[:120])
+        finally:
+            for w in writers:
+                w.join(timeout=30)
+
+        assert not torn, f"torn reads observed: {torn[:2]}"
+        for w in writers:
+            assert w.exitcode == 0

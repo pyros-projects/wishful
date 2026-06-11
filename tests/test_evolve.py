@@ -1096,3 +1096,37 @@ class TestEvolveArgValidation:
 
         with pytest.raises(ValueError):
             evolve(self._fn(), fitness=lambda fn: 1.0, **kwargs)
+
+
+def test_mutation_uses_sync_llm_path(monkeypatch):
+    """Pin review #48's decision: evolve mutates via the SYNC client call.
+
+    evolve's bounding model is worker threads + per-variant timeout around a
+    synchronous generate_module_code; the async path belongs to explore's owned
+    loop. If this test fails because evolve went async, delete it and the
+    decision comment in mutation.py together.
+    """
+    mutation_module = importlib.import_module("wishful.evolve.mutation")
+    llm_module = importlib.import_module("wishful.llm.client")
+
+    sync_calls = []
+
+    def fake_sync(module, functions, context, **kwargs):
+        sync_calls.append(module)
+        return "def f(x):\n    return x + 1"
+
+    async def bomb_async(*args, **kwargs):  # pragma: no cover - must not run
+        raise AssertionError("evolve must not use the async LLM path")
+
+    monkeypatch.setattr(mutation_module, "generate_module_code", fake_sync)
+    monkeypatch.setattr(llm_module, "agenerate_module_code", bomb_async)
+
+    from wishful.evolve import evolve
+
+    def f(x):
+        return x
+
+    f.__wishful_source__ = "def f(x):\n    return x"
+    result = evolve(f, fitness=lambda fn: float(fn(1)), generations=1, variants=1)
+    assert result(1) == 2
+    assert sync_calls == ["wishful.evolve._mutation"]

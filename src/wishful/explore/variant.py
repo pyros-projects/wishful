@@ -27,7 +27,8 @@ def wrap_with_metadata(fn: Callable, metadata: VariantMetadata) -> Callable:
         "generation_time": metadata.generation_time,
         "benchmark_score": metadata.benchmark_score,
     }
-    if metadata.source_code:
-        fn.__wishful_source__ = metadata.source_code  # type: ignore[attr-defined]
+    # Unconditional: the documented attribute must never be absent on an
+    # explore-returned function (review #44) — empty string over AttributeError.
+    fn.__wishful_source__ = metadata.source_code or ""  # type: ignore[attr-defined]
     return fn
 
