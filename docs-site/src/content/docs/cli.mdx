@@ -48,5 +48,5 @@ _Small but mighty._
 
 - These CLI helpers mirror the Python API: `inspect_cache`, `clear_cache`, `regenerate`.
 - Add `--json` to any command to script against it; exit codes are `0`/`1`/`2`.
-- Cache paths strip both `static` and `dynamic` prefixes, so dynamic and static share the same cache file.
+- Static modules cache at `<cache_dir>/<name>.py`; dynamic modules live entirely under `<cache_dir>/_dynamic/<name>.py`. As of 0.3.0 the two namespaces never share a file.
 - When file logging is enabled, logs live under `<cache_dir>/_logs/`; clearing the cache nukes them too. (No survivors.)

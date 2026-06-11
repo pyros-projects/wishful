@@ -8,7 +8,7 @@
   <a href="https://badge.fury.io/py/wishful"><img src="https://badge.fury.io/py/wishful.svg" alt="PyPI version"></a>
   <a href="https://www.python.org/downloads/"><img src="https://img.shields.io/badge/python-3.12+-blue.svg" alt="Python 3.12+"></a>
   <a href="https://opensource.org/licenses/MIT"><img src="https://img.shields.io/badge/License-MIT-yellow.svg" alt="License: MIT"></a>
-  <a href="https://github.com/pyros-projects/wishful"><img src="https://img.shields.io/badge/tests-263%20passed-brightgreen.svg" alt="Tests"></a>
+  <a href="https://github.com/pyros-projects/wishful"><img src="https://img.shields.io/badge/tests-326%20passed-brightgreen.svg" alt="Tests"></a>
   <a href="https://github.com/pyros-projects/wishful"><img src="https://img.shields.io/badge/coverage-86%25-green.svg" alt="Coverage"></a>
   <a href="https://github.com/astral-sh/ruff"><img src="https://img.shields.io/badge/code%20style-ruff-000000.svg" alt="Code style: ruff"></a>
 </p>
@@ -571,7 +571,7 @@ wishful/
 │   ├── explore/          # Multi-variant generation & selection
 │   ├── evolve/           # Generational evolution of functions
 │   └── safety/           # Safety validation
-├── tests/                # Test suite (261 tests)
+├── tests/                # Test suite (326 tests)
 ├── examples/             # 15 usage examples
 │   ├── 00_quick_start.py
 │   ├── 01_json_yaml.py

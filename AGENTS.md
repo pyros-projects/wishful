@@ -195,6 +195,7 @@ accept/rollback state.
 From the root:
 
 - `docs/solutions/` — documented solutions to past problems (bugs, best practices, workflow patterns), organized by category with YAML frontmatter (`module`, `tags`, `problem_type`). Relevant when implementing or debugging in documented areas.
+- `CONCEPTS.md` — shared domain vocabulary (entities, named processes, status concepts with project-specific meaning). Relevant when orienting to the codebase or discussing domain concepts.
 - `pyproject.toml`  
   - Project metadata: name, version, description.
   - `requires-python = ">=3.12"`.
@@ -269,8 +270,8 @@ From the root:
   - `conftest.py` – `reset_wishful` fixture:
     - Forces per‑test cache dir under `tmp_path`.
     - Disables spinner and interactive review.
-    - Sets `allow_unsafe=True` for tests, wipes modules and cache between tests.
-  - Individual test modules (261 tests total; prefer the total over per-file counts to avoid drift):
+    - Keeps safety ON by default (`allow_unsafe=False`); the few tests that need a bypass opt in via the `unsafe_settings` fixture. Wipes modules and cache between tests.
+  - Individual test modules (326 tests total; prefer the total over per-file counts to avoid drift):
     - `test_import_hook.py` – core import/loader behavior and cache semantics.
     - `test_cli.py` – CLI argument handling, `--json`, exit codes, and messaging.
     - `test_cache.py` – cache manager behavior.
@@ -361,7 +362,7 @@ Configuration is centralized in `src/wishful/config.py` via the `Settings` datac
 - `debug: bool` – enable verbose logging (sets `log_level` to DEBUG and file logging on unless overridden).
 - `allow_unsafe: bool` – bypass safety checks when `True`.
 - `spinner: bool` – enable/disable the rich spinner UI.
-- `max_tokens: int` – upper bound for LLM response tokens (default 4096).
+- `max_tokens: int` – upper bound for LLM response tokens (default 16384).
 - `temperature: float` – LLM sampling temperature (default 1.0).
 - `system_prompt: str` – system prompt sent to the LLM (default from `WISHFUL_SYSTEM_PROMPT` or a built-in template).
 - `log_level: str` – logging level, uppercased (default `"WARNING"`, from `WISHFUL_LOG_LEVEL`).
