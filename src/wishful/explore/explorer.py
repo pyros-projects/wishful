@@ -4,10 +4,10 @@ from __future__ import annotations
 
 import ast
 import asyncio
-import atexit
 import os
 import re
 import sys
+import threading
 import time
 import warnings
 from functools import partial
@@ -27,69 +27,55 @@ from wishful.explore.variant import VariantMetadata, wrap_with_metadata
 from wishful.llm.client import agenerate_module_code
 from wishful.safety.validator import SecurityError, validate_code
 
-# Suppress litellm's async cleanup warnings at module level (they're harmless)
+# Suppress litellm's fire-and-forget logging coroutines being abandoned at
+# process exit. Scoped to litellm's Logging.* coroutines only — a user's own
+# forgotten ``await`` still warns. (GC-time warnings can't be scoped by call
+# site, so message-scoping is the tightest filter possible.)
 warnings.filterwarnings(
     "ignore",
-    message=".*coroutine.*was never awaited.*",
+    message=r".*coroutine 'Logging\..*' was never awaited.*",
     category=RuntimeWarning,
 )
 
-# Cache event loop to avoid litellm's LoggingWorker issues with multiple asyncio.run() calls
-_cached_loop: Optional[asyncio.AbstractEventLoop] = None
+# explore() runs its async pipeline on ONE persistent loop owned by wishful,
+# living on a dedicated daemon thread. Verified 2026-06-11 against gpt-4.1 on
+# litellm 1.88.1: per-call asyncio.run() still abandons litellm's
+# Logging.async_success_handler coroutines (the loop dies before they run), so
+# the plan's conservative owned-loop design applies — never the host's loop,
+# never nest_asyncio.
+_loop_lock = threading.Lock()
+_owned_loop: Optional[asyncio.AbstractEventLoop] = None
 
 
-def _get_or_create_event_loop() -> asyncio.AbstractEventLoop:
-    """Get existing event loop or create a new one (reusable across calls)."""
-    global _cached_loop
-    
-    # Try to get existing loop
-    try:
-        loop = asyncio.get_running_loop()
+def _get_owned_loop() -> asyncio.AbstractEventLoop:
+    """Start (once) and return wishful's background event loop."""
+    global _owned_loop
+    with _loop_lock:
+        if _owned_loop is not None and not _owned_loop.is_closed():
+            return _owned_loop
+        loop = asyncio.new_event_loop()
+        threading.Thread(
+            target=loop.run_forever, name="wishful-explore-loop", daemon=True
+        ).start()
+        _owned_loop = loop
         return loop
-    except RuntimeError:
-        pass
-    
-    # Reuse cached loop if it's still valid
-    if _cached_loop is not None and not _cached_loop.is_closed():
-        return _cached_loop
-    
-    # Create new loop and cache it
-    _cached_loop = asyncio.new_event_loop()
-    return _cached_loop
-
-
-def _cleanup_loop():
-    """Clean up the cached event loop on exit."""
-    global _cached_loop
-    if _cached_loop is not None and not _cached_loop.is_closed():
-        try:
-            # Cancel pending tasks
-            pending = asyncio.all_tasks(_cached_loop)
-            for task in pending:
-                task.cancel()
-            # Don't close - let Python handle it to avoid warnings
-        except Exception:
-            pass
-
-
-atexit.register(_cleanup_loop)
 
 
 def _run_async(coro):
-    """Run async coroutine, reusing event loop to avoid litellm issues."""
-    loop = _get_or_create_event_loop()
-    
-    # If we're already in an event loop, we can't use run_until_complete
+    """Run an exploration coroutine on the owned loop and block for the result.
+
+    Safe both from plain sync code and from inside a running event loop
+    (Jupyter): the coroutine executes on wishful's background loop, so the
+    host's loop is never re-entered or monkeypatched — the calling thread
+    simply blocks until the exploration finishes, as a synchronous explore()
+    has always done.
+    """
+    future = asyncio.run_coroutine_threadsafe(coro, _get_owned_loop())
     try:
-        asyncio.get_running_loop()
-        # Already in async context - shouldn't happen in normal usage
-        # but handle gracefully
-        import nest_asyncio
-        nest_asyncio.apply()
-        return loop.run_until_complete(coro)
-    except RuntimeError:
-        # Not in async context - normal case
-        return loop.run_until_complete(coro)
+        return future.result()
+    except KeyboardInterrupt:
+        future.cancel()
+        raise
 
 
 def _merge_into_module(existing, function_name: str, winner_source: str) -> str:

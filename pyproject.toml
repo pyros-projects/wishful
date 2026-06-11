@@ -13,7 +13,6 @@ dependencies = [
     "python-dotenv>=1.0.1",
     "pydantic>=2.12.4",
     "loguru>=0.7.3",
-    "nest-asyncio>=1.6.0",
 ]
 
 [project.scripts]
@@ -30,11 +29,6 @@ markers = [
 
 [tool.mypy]
 python_version = "3.12"
-
-[[tool.mypy.overrides]]
-# nest_asyncio ships no type stubs / py.typed marker.
-module = "nest_asyncio"
-ignore_missing_imports = true
 
 [tool.coverage.run]
 source = ["wishful"]

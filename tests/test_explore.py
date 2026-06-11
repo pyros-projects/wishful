@@ -17,6 +17,60 @@ def make_async_fake(sync_fn):
     return async_wrapper
 
 
+class TestOwnedEventLoop:
+    """explore() owns its event loop and never touches the host's (plan R5)."""
+
+    def test_explore_inside_running_loop(self, monkeypatch):
+        """Jupyter simulation: explore() called from within asyncio.run() works."""
+        def fake_generate(module, functions, context, **kwargs):
+            return "def f():\n    return 'from-loop'\n"
+
+        monkeypatch.setattr(
+            explorer_module, "agenerate_module_code", make_async_fake(fake_generate)
+        )
+
+        async def jupyter_cell():
+            # Synchronous explore() from inside a running loop — must not
+            # raise, must not re-enter or patch the host loop.
+            return explore(
+                "wishful.static.inloop.f",
+                variants=1,
+                test=lambda fn: fn() == "from-loop",
+                verbose=False,
+                save_results=False,
+            )
+
+        winner = asyncio.run(jupyter_cell())
+        assert winner() == "from-loop"
+
+    def test_sequential_explores_share_owned_loop(self, monkeypatch):
+        """Back-to-back explore() calls reuse one healthy loop (litellm needs this)."""
+        def fake_generate(module, functions, context, **kwargs):
+            return "def f():\n    return 1\n"
+
+        monkeypatch.setattr(
+            explorer_module, "agenerate_module_code", make_async_fake(fake_generate)
+        )
+
+        for round_no in range(3):
+            fn = explore(
+                f"wishful.static.seq{round_no}.f",
+                variants=1,
+                test=lambda fn: True,
+                verbose=False,
+                save_results=False,
+            )
+            assert callable(fn)
+        loop = explorer_module._owned_loop
+        assert loop is not None and not loop.is_closed()
+
+    def test_no_nest_asyncio_remains(self):
+        import pathlib
+
+        src = pathlib.Path(explorer_module.__file__).read_text()
+        assert "import nest_asyncio" not in src  # prose may mention it; code must not
+
+
 class TestBoundedCandidates:
     """User callables are time-bounded and contained (plan R4).
 
