@@ -58,4 +58,9 @@ def test_logging_records_syntax_retry(monkeypatch):
 
     log_path = _latest_log(wishful.settings.cache_dir)
     assert log_path and log_path.exists()
-    assert "SyntaxError while loading wishful.dynamic.logsyntax" in log_path.read_text()
+    # With safety on (the shipped default), a malformed generation is caught at
+    # validation time and the retry is logged here, before exec.
+    assert (
+        "wishful.dynamic.logsyntax has invalid syntax; regenerating once"
+        in log_path.read_text()
+    )

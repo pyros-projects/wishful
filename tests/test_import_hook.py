@@ -514,6 +514,40 @@ def test_ipykernel_counts_as_promptable(monkeypatch):
     assert loader._is_promptable() is True
 
 
+# --- U9: safety-ON test posture ---------------------------------------------
+
+
+def test_suite_default_is_safety_on():
+    """Guard against a regression back to the global allow_unsafe=True default."""
+    from wishful.config import settings
+
+    assert settings.allow_unsafe is False
+
+
+def test_unsafe_settings_fixture_enables_bypass(unsafe_settings):
+    from wishful.config import settings
+    from wishful.safety.validator import validate_code
+
+    assert settings.allow_unsafe is True
+    # With the bypass on, even dangerous code passes validation.
+    validate_code("import os\nos.system('x')\n", allow_unsafe=settings.allow_unsafe)
+
+
+def test_clean_generation_imports_end_to_end_with_validation(monkeypatch):
+    """A clean generation runs through the full pipeline with safety ON."""
+
+    def gen(module, functions, context, **kwargs):
+        return "import json\n\ndef dump(obj):\n    return json.dumps(obj)\n"
+
+    monkeypatch.setattr(loader, "generate_module_code", gen)
+    manager.clear_cache()
+    _reset_modules()
+
+    from wishful.static.jsonhelp import dump
+
+    assert dump({"a": 1}) == '{"a": 1}'
+
+
 def test_dynamic_writes_snapshot(monkeypatch):
     call_count = {"n": 0}
 
