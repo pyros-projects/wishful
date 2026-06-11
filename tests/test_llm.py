@@ -100,6 +100,48 @@ def test_strip_code_fences_without_fences():
     assert result == text
 
 
+# --- U3: fence stripping ----------------------------------------------------
+
+
+def test_strip_fences_drops_python_language_tag():
+    """The standard ```python response must not leave 'python' as a source line."""
+    result = strip_code_fences("```python\ndef f():\n    return 1\n```")
+    assert result == "def f():\n    return 1"
+    assert not result.startswith("python")
+    # And it must actually compile (the original bug exec'd 'python\n...').
+    compile(result, "<test>", "exec")
+
+
+def test_strip_fences_bare_fence():
+    result = strip_code_fences("```\ndef f():\n    return 1\n```")
+    assert result == "def f():\n    return 1"
+
+
+def test_strip_fences_prose_before_and_after():
+    text = "Here you go:\n```python\ndef f():\n    return 1\n```\nHope this helps!"
+    result = strip_code_fences(text)
+    assert result == "def f():\n    return 1"
+    assert "Hope this helps" not in result
+    assert "Here you go" not in result
+
+
+def test_strip_fences_multiple_blocks_joined():
+    text = "```python\nimport re\n```\nand\n```python\ndef f():\n    return 1\n```"
+    result = strip_code_fences(text)
+    assert result == "import re\n\ndef f():\n    return 1"
+    compile(result, "<test>", "exec")
+
+
+def test_strip_fences_empty_block_returns_empty():
+    assert strip_code_fences("```python\n```") == ""
+
+
+def test_strip_fences_windows_line_endings():
+    result = strip_code_fences("```python\r\ndef f():\r\n    return 1\r\n```")
+    assert "python" not in result
+    assert "def f():" in result
+
+
 def test_fake_response_single_function():
     """Test fake LLM response with single function."""
     result = _fake_response(["foo"])
