@@ -539,6 +539,29 @@ def test_review_gates_regeneration_path(monkeypatch):
     assert mod.bar() == "bar"  # regen path prompted (approved) then executed
 
 
+def test_review_gates_dynamic_runtime_call(monkeypatch):
+    """The dynamic per-call regeneration path also routes through the review gate."""
+    configure(review=True)
+    monkeypatch.setattr(loader, "_is_promptable", lambda: True)
+    # 'y' approves the import-time generation; 'n' rejects the per-call regen.
+    answers = iter(["y", "n"])
+    monkeypatch.setattr("builtins.input", lambda prompt="": next(answers))
+
+    def gen(module, functions, context, **kwargs):
+        return "def line():\n    return 'ok'\n"
+
+    monkeypatch.setattr(loader, "generate_module_code", gen)
+    manager.clear_cache()
+    _reset_modules()
+
+    import wishful.dynamic.revdyn as revdyn  # import-time gen approved
+
+    # The runtime call regenerates and must route through the review gate, which
+    # rejects here -> raises instead of executing the freshly generated source.
+    with pytest.raises(ImportError):
+        revdyn.line()
+
+
 def test_ipykernel_counts_as_promptable(monkeypatch):
     """Notebooks route input() to the frontend even though stdin isn't a TTY."""
     monkeypatch.setitem(sys.modules, "ipykernel", types.ModuleType("ipykernel"))
