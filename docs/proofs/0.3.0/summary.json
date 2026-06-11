@@ -1,0 +1,37 @@
+{
+  "version": "0.3.0",
+  "model": "openai/gpt-5.5",
+  "generated_at": "2026-06-11T03:50:44.223494+00:00",
+  "passed": 4,
+  "failed": 0,
+  "cases": [
+    {
+      "case": "static_import:extract_numbers",
+      "status": "pass",
+      "seconds": 5.74,
+      "attempts": 1,
+      "output_summary": "[12, 3]"
+    },
+    {
+      "case": "dynamic_call:programming_one_liner",
+      "status": "pass",
+      "seconds": 14.82,
+      "attempts": 1,
+      "output_summary": "I told my code to take a break, and now it just throws exceptions for work-life balance."
+    },
+    {
+      "case": "explore:add_one",
+      "status": "pass",
+      "seconds": 11.87,
+      "attempts": 1,
+      "output_summary": "add_one(1)=2"
+    },
+    {
+      "case": "evolve:baseline",
+      "status": "pass",
+      "seconds": 7.91,
+      "attempts": 1,
+      "output_summary": "fitness=1.0"
+    }
+  ]
+}
