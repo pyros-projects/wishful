@@ -238,7 +238,8 @@ From the root:
       - Serializes type definitions to Python code for inclusion in LLM prompts.
   - `safety/`
     - `validator.py` – `validate_code(source, allow_unsafe)` plus `SecurityError`.
-    - AST‑based checks for forbidden imports (`os`, `subprocess`, `sys`), forbidden calls (`eval`, `exec`, unsafe `open`, `os.system`, `subprocess.*`, etc.).
+    - AST checks: forbidden imports (`os`, `subprocess`, `sys`, `importlib`, `builtins`, `ctypes`); forbidden calls (`eval`, `exec`, `compile`, `__import__`); `__builtins__`/`globals()`/`vars()` gadget access; `getattr` for forbidden attributes; write-mode or non-literal-mode `open()`; attribute calls on unbound `os`/`subprocess`/`sys`/`importlib`/`ctypes` (local bindings are tracked to avoid false positives). The same scan re-runs on cache load.
+    - **Defense in depth, not a sandbox.** Generated code runs in-process; aliased/computed access can bypass a static scan (documented as `xfail` residuals in `tests/test_safety.py`). Keep validator coverage ≥90% and never weaken a rule without updating the negative/positive corpus and the README Safety Rails section.
   - `explore/` – multi-variant generation
     - `__init__.py` – exports `explore`, `ExplorationError`.
     - `explorer.py` – core `explore()` function for generating and selecting variants.

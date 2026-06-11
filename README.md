@@ -404,11 +404,13 @@ All settings can also be configured via environment variables:
 
 ---
 
-## 🛡️ Safety Rails: Wishful Isn't _That_ Reckless
+## 🛡️ Safety Rails: Defense in Depth, Not a Sandbox
 
-Generated code gets AST-scanned to block dangerous patterns: forbidden imports (`os`, `subprocess`, `sys`), `eval()`/`exec()`, unsafe file operations, and system calls.
+Before generated code runs, it's AST-scanned and the obvious dangerous patterns are blocked: forbidden imports (`os`, `subprocess`, `sys`, `importlib`, `builtins`, `ctypes`), `eval`/`exec`/`compile`/`__import__`, `__builtins__` gadget access, write-mode (or non-literal-mode) `open()`, and system calls on those modules. The same scan runs again when a cached file is loaded, so a tampered `.wishful/` file is re-checked, not trusted.
 
-**Override at your own peril**: `WISHFUL_UNSAFE=1` or `allow_unsafe=True` turns off the guardrails. We won't judge. (We totally will.)
+**Be honest about what this is.** Generated code executes **in your process**. A static AST scan stops a careless generation, not a determined one — aliased or computed access (`g = getattr; g(obj, "system")`) can slip through, and only an out-of-process sandbox would make running model-written code truly safe. Treat the validator as a seatbelt, not a vault. For untrusted inputs, review the cached code (it's plain Python) or run wishful where arbitrary code execution is acceptable.
+
+**Override at your own peril**: `WISHFUL_UNSAFE=1` or `allow_unsafe=True` turns the scan off entirely.
 
 ---
 
