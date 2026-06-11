@@ -675,3 +675,61 @@ class TestExploreIntegration:
                 verbose=False,
                 # No benchmark provided!
             )
+
+
+class TestExploreTypeContext:
+    """explore's generation calls carry registered type context (plan R12)."""
+
+    def test_registered_schema_reaches_generation(self, monkeypatch):
+        import wishful
+
+        @wishful.type(output_for="make_point")
+        class Point:
+            x: int
+            y: int
+
+        seen = {}
+
+        async def spy_generate(module, functions, context, **kwargs):
+            seen["type_schemas"] = kwargs.get("type_schemas")
+            seen["function_output_types"] = kwargs.get("function_output_types")
+            return "def make_point():\n    return {'x': 1, 'y': 2}\n"
+
+        monkeypatch.setattr(explorer_module, "agenerate_module_code", spy_generate)
+
+        explore(
+            "wishful.static.geo.make_point",
+            variants=1,
+            test=lambda fn: True,
+            verbose=False,
+            save_results=False,
+        )
+
+        assert seen["type_schemas"] and "Point" in seen["type_schemas"]
+        assert seen["function_output_types"] == {"make_point": "Point"}
+
+    def test_explorer_routes_through_shared_helper(self, monkeypatch):
+        from wishful.core import execution
+
+        calls = []
+        real = execution.compile_and_exec
+
+        def spy(source, function_name, **kwargs):
+            calls.append(function_name)
+            return real(source, function_name, **kwargs)
+
+        monkeypatch.setattr(explorer_module, "compile_and_exec", spy)
+        monkeypatch.setattr(
+            explorer_module,
+            "agenerate_module_code",
+            make_async_fake(lambda *a, **k: "def g():\n    return 1\n"),
+        )
+
+        explore(
+            "wishful.static.shared.g",
+            variants=1,
+            test=lambda fn: True,
+            verbose=False,
+            save_results=False,
+        )
+        assert "g" in calls

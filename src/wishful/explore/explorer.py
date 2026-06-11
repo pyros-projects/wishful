@@ -15,7 +15,7 @@ from typing import Callable, List, Literal, Optional, Tuple, Union
 
 from wishful.cache.manager import read_cached, write_cached
 from wishful.config import settings
-from wishful.core.execution import run_user_callable
+from wishful.core.execution import compile_and_exec, run_user_callable
 from wishful.explore.exceptions import ExplorationError
 from wishful.logging import logger
 from wishful.explore.progress import (
@@ -25,6 +25,7 @@ from wishful.explore.progress import (
 )
 from wishful.explore.variant import VariantMetadata, wrap_with_metadata
 from wishful.llm.client import agenerate_module_code
+from wishful.types.registry import get_all_type_schemas, get_output_type_for_function
 from wishful.safety.validator import SecurityError, validate_code
 
 # Suppress litellm's fire-and-forget logging coroutines being abandoned at
@@ -362,10 +363,22 @@ async def _generate_and_evaluate_async(
         try:
             start_time = time.perf_counter()
 
-            # Async generation with timeout
+            # Async generation with timeout. explore has no import site to
+            # discover context from, but registered @wishful.type schemas and
+            # output bindings still apply (plan R12).
+            type_schemas = get_all_type_schemas() or None
+            output_type = get_output_type_for_function(function_name)
             try:
                 source = await asyncio.wait_for(
-                    agenerate_module_code(module_name, [function_name], None),
+                    agenerate_module_code(
+                        module_name,
+                        [function_name],
+                        None,
+                        type_schemas=type_schemas,
+                        function_output_types=(
+                            {function_name: output_type} if output_type else None
+                        ),
+                    ),
                     timeout=timeout,
                 )
             except asyncio.TimeoutError:
@@ -424,12 +437,9 @@ async def _generate_and_evaluate_async(
 
 
 def _compile_source(source: str, function_name: str) -> Optional[Callable]:
-    """Compile source and extract function. Returns None on failure."""
+    """Compile source and extract function via the shared execution path."""
     try:
-        validate_code(source, allow_unsafe=settings.allow_unsafe)
-        namespace: dict = {}
-        exec(compile(source, "<explore>", "exec"), namespace)
-        return namespace.get(function_name)
+        return compile_and_exec(source, function_name, filename="<explore>")
     except Exception:
         return None
 

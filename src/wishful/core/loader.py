@@ -73,11 +73,15 @@ def _source_defines(source: str, name: str) -> bool:
 
 
 def _resolve_generate_module_code():
-    """Use the generate_module_code function from the live loader module.
+    """Resolve the effective generate_module_code across module churn.
 
-    MagicLoader instances can outlive module reloads during tests; looking up
-    the function each time keeps monkeypatches effective while preferring any
-    patched version over the original default.
+    MagicLoader instances can outlive module reloads (the meta-path finder
+    keeps the original module's classes alive while tests re-import fresh
+    copies). A monkeypatch may therefore land on either the live module in
+    sys.modules or on this instance's own module globals — check both and
+    prefer whichever differs from the canonical default. Prefer injecting
+    ``MagicLoader.generate_fn`` in new code; this fallback exists so plain
+    monkeypatching keeps working.
     """
     default_fn = importlib.import_module("wishful.llm.client").generate_module_code
 
@@ -145,15 +149,26 @@ class DynamicProxyModule(ModuleType):
 
 class MagicLoader(importlib.abc.Loader):
     """Loader that returns dynamic modules backed by cache + LLM generation.
-    
+
     Supports two modes:
     - 'static': Traditional cached behavior (default)
     - 'dynamic': Regenerates with runtime context on every access
+
+    ``generate_fn`` is the injection seam (spec 003, tests): when set — on the
+    instance via the constructor, or on the class (wrap in ``staticmethod`` to
+    dodge bound-method binding) — it replaces the default LLM client for every
+    generation this loader performs. When None, the module-global
+    ``generate_module_code`` is resolved at call time, so monkeypatching the
+    loader module keeps working.
     """
 
-    def __init__(self, fullname: str, mode: str = "static"):
+    generate_fn = None  # type: ignore[var-annotated]
+
+    def __init__(self, fullname: str, mode: str = "static", generate_fn=None):
         self.fullname = fullname
         self.mode = mode  # 'static' or 'dynamic'
+        if generate_fn is not None:
+            self.generate_fn = generate_fn
 
     def create_module(self, spec):  # pragma: no cover - default works
         return None
@@ -224,7 +239,8 @@ class MagicLoader(importlib.abc.Loader):
             "generate start fullname={} mode={} functions={}", self.fullname, self.mode, functions
         )
         with spinner(f"Generating {self.fullname}"):
-            gen_fn = _resolve_generate_module_code()
+            # Injection seam first; otherwise the monkeypatch-tolerant resolver.
+            gen_fn = self.generate_fn or _resolve_generate_module_code()
             return gen_fn(
                 self.fullname,
                 functions,

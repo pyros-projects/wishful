@@ -290,7 +290,13 @@ class AsyncExploreLiveDisplay:
 
 
 def save_exploration_results(progress: ExploreProgress) -> Path:
-    """Save exploration results to CSV in the cache directory."""
+    """Save exploration results to CSV in the cache directory.
+
+    LEGACY: this flat-CSV layout predates the spec-003 evidence store. The
+    final location and shape (``.wishful/evidence/`` vs ``.wishful/runs/``)
+    is spec-003 Open Decision 4 — this writer stays as-is until that decision
+    lands, then becomes a thin adapter or is removed.
+    """
     explore_dir = settings.cache_dir / "_explore"
     explore_dir.mkdir(parents=True, exist_ok=True)
 

@@ -8,7 +8,9 @@ from wishful.config import Settings, configure, reset_defaults, settings
 def test_default_settings():
     """Test default settings values."""
     s = Settings()
-    assert s.cache_dir == Path(".wishful")
+    # Absolute from construction so os.chdir() can't move the cache (F4).
+    assert s.cache_dir.is_absolute()
+    assert s.cache_dir == Path(".wishful").resolve()
     assert s.review is False
     assert s.debug is False
     assert s.allow_unsafe is False
@@ -122,3 +124,42 @@ def test_reset_defaults_rereads_env_uniformly(monkeypatch):
     assert settings.max_tokens == 1234
     assert str(settings.cache_dir) == "/tmp/wishful_env_cache"
     assert settings.review is True
+
+
+def test_concurrent_configure_is_atomic():
+    """8 threads configure() concurrently; settings end consistent (plan R14)."""
+    import threading
+
+    from wishful.config import configure, settings
+
+    # Each thread writes a matched pair; afterwards the pair must agree.
+    def worker(i: int) -> None:
+        for _ in range(50):
+            configure(temperature=float(i), max_tokens=1000 + i)
+
+    threads = [threading.Thread(target=worker, args=(i,)) for i in range(8)]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
+
+    assert settings.max_tokens - 1000 == int(settings.temperature)
+
+
+def test_configure_context_radius_and_reset():
+    """context_radius is a real setting: configure-able and reset-aware (R11)."""
+    from wishful.config import configure, reset_defaults, settings
+
+    configure(context_radius=6)
+    assert settings.context_radius == 6
+    reset_defaults()
+    assert settings.context_radius == 3
+
+
+def test_configure_rejects_negative_context_radius():
+    import pytest
+
+    from wishful.config import configure
+
+    with pytest.raises(ValueError):
+        configure(context_radius=-2)

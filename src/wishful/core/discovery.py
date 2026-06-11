@@ -3,15 +3,12 @@ from __future__ import annotations
 import ast
 import inspect
 import linecache
-import os
 from pathlib import Path
 from textwrap import dedent
 from typing import Iterable, List, Sequence
 
+from wishful.config import configure, settings
 from wishful.types import get_all_type_schemas, get_output_type_for_function
-
-# Default radius for surrounding-context capture; configurable via env + setter.
-_context_radius = int(os.getenv("WISHFUL_CONTEXT_RADIUS", "3"))
 
 
 class ImportContext:
@@ -242,8 +239,9 @@ def _parse_file_safe(filename: str) -> ast.AST | None:
 
 
 def _build_context_snippets(filename: str, lineno: int, functions: Sequence[str]) -> str | None:
-    snippets = [_gather_context_lines(filename, lineno, radius=_context_radius)]
-    snippets += _gather_usage_context(filename, functions, radius=_context_radius)
+    radius = settings.context_radius
+    snippets = [_gather_context_lines(filename, lineno, radius=radius)]
+    snippets += _gather_usage_context(filename, functions, radius=radius)
     combined = "\n\n".join(part for part in snippets if part)
     return combined or None
 
@@ -259,8 +257,9 @@ def _dedupe(items: Sequence[str]) -> list[str]:
 
 
 def set_context_radius(radius: int) -> None:
-    """Update the global context radius used for import discovery."""
-    global _context_radius
-    if radius < 0:
-        raise ValueError("context radius must be non-negative")
-    _context_radius = radius
+    """Update the context radius used for import discovery.
+
+    Thin wrapper over ``configure(context_radius=...)`` — the radius lives in
+    Settings so it is configure/reset/env aware like every other knob.
+    """
+    configure(context_radius=radius)

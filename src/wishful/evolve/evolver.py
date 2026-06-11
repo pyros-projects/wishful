@@ -8,11 +8,50 @@ from functools import partial
 from typing import Any
 
 from wishful.config import settings
-from wishful.core.execution import run_user_callable as _call_user
+from wishful.core.execution import compile_and_exec, run_user_callable as _call_user
 from wishful.evolve.exceptions import EvolutionError
 from wishful.evolve.history import EvolutionHistory, GenerationRecord
 from wishful.evolve.mutation import get_function_source, mutate_with_llm
-from wishful.safety.validator import validate_code
+
+
+class EvolutionResult:
+    """Callable wrapper around an evolution winner.
+
+    Behaves like the winning function — calling it delegates to ``fn``, and
+    ``__name__``/``__wishful_source__``/``__wishful_evolution__`` and every
+    other attribute proxy to the winner via ``__getattr__`` (proxy, not copy,
+    so chained ``evolve(evolve(fn))`` reads the winner's current metadata).
+    ``__wrapped__`` is set so ``inspect.signature(result)`` resolves to the
+    winner's signature. The run's evidence rides along as ``history`` and
+    ``best_score``.
+
+    Deliberately ships **no** ``accept()`` method: spec-003 Open Decision 1
+    (auto-cache vs require-accept) is unresolved, and a silent no-op would let
+    callers form beliefs that later become behavior changes. Adding it later
+    is non-breaking.
+    """
+
+    def __init__(self, fn: Callable[..., Any], history: EvolutionHistory):
+        self.fn = fn
+        self.history = history
+        self.best_score = history.final_fitness
+        self.__wrapped__ = fn
+
+    def __call__(self, *args: Any, **kwargs: Any) -> Any:
+        return self.fn(*args, **kwargs)
+
+    def __getattr__(self, name: str) -> Any:
+        # Fires only for names not on the instance/class — i.e. everything the
+        # winner carries (__name__, __wishful_source__, __wishful_evolution__, …).
+        return getattr(self.fn, name)
+
+    @property  # the class docstring must not shadow the winner's
+    def __doc__(self) -> str | None:  # type: ignore[override]
+        return self.fn.__doc__
+
+    def __repr__(self) -> str:
+        name = getattr(self.fn, "__name__", "<fn>")
+        return f"<EvolutionResult {name} best_score={self.best_score}>"
 
 
 def evolve(
@@ -26,7 +65,7 @@ def evolve(
     keep_history: bool = True,
     history_limit: int = 10,
     timeout_per_variant: float = 30.0,
-) -> Callable[..., Any]:
+) -> EvolutionResult:
     """Improve a function by mutating it and selecting higher-fitness variants.
 
     Args:
@@ -43,8 +82,9 @@ def evolve(
             recorded as failed and the loop continues.
 
     Returns:
-        The best passing function, annotated with ``__wishful_source__`` and
-        ``__wishful_evolution__``.
+        An :class:`EvolutionResult` — callable like the winner itself, with
+        ``__wishful_source__``/``__wishful_evolution__`` proxied from it and
+        the run's ``history`` and ``best_score`` attached.
 
     Raises:
         EvolutionError: If the original function and all variants fail the test.
@@ -173,7 +213,7 @@ def evolve(
     history.generations = generations
     history.total_variants_tried = total_attempts
     _attach_evolution_metadata(best_fn, best_source, history)
-    return best_fn
+    return EvolutionResult(best_fn, history)
 
 
 def _validate_evolve_args(
@@ -228,15 +268,14 @@ def _score_variant(
 
 def _compile_function(source: str, function_name: str) -> Callable[..., Any]:
     normalized_source = textwrap.dedent(source).strip()
-    validate_code(normalized_source, allow_unsafe=settings.allow_unsafe)
-    namespace: dict[str, Any] = {}
-    exec(compile(normalized_source, "<wishful.evolve>", "exec"), namespace)
-
-    candidate = namespace.get(function_name)
-    if not callable(candidate):
+    try:
+        candidate = compile_and_exec(
+            normalized_source, function_name, filename="<wishful.evolve>"
+        )
+    except ValueError as exc:
         raise EvolutionError(
             f"Generated source did not define callable {function_name!r}"
-        )
+        ) from exc
 
     setattr(candidate, "__wishful_source__", normalized_source)
     return candidate

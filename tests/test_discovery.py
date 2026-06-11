@@ -53,9 +53,21 @@ def test_discover_returns_empty_when_no_context():
 
 
 def test_set_context_radius_updates(monkeypatch):
-    """Ensure the exported setter updates discovery radius."""
+    """The setter is a thin wrapper over configure(context_radius=...)."""
+    from wishful.config import reset_defaults, settings
+
     discovery.set_context_radius(7)
-    assert discovery._context_radius == 7
+    assert settings.context_radius == 7
+    # reset_defaults restores the env-driven default like any other knob
+    reset_defaults()
+    assert settings.context_radius == 3
+
+
+def test_set_context_radius_rejects_negative():
+    import pytest
+
+    with pytest.raises(ValueError):
+        discovery.set_context_radius(-1)
 
 
 def test_gather_usage_context_includes_calls(tmp_path):

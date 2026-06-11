@@ -12,6 +12,39 @@ from __future__ import annotations
 import threading
 from typing import Any, Callable
 
+from wishful.config import settings
+from wishful.safety.validator import validate_code
+
+
+def compile_and_exec(
+    source: str,
+    function_name: str,
+    *,
+    filename: str = "<wishful>",
+    on_executed: Callable[[str, dict[str, Any]], None] | None = None,
+) -> Callable[..., Any]:
+    """Validate, compile, and execute ``source``; return the named callable.
+
+    The one compile-and-exec path for the search loops (explorer, evolver) and
+    the casefile hook point for spec 003: ``on_executed`` fires with
+    ``(source, namespace)`` only after execution succeeds, so evidence capture
+    can be deferred — it never runs inside an import lock and a failing
+    callback cannot poison the compiled function.
+
+    Raises ``ValueError`` when the executed source does not define
+    ``function_name`` as a callable; ``SecurityError``/``SyntaxError``
+    propagate from validation/compilation.
+    """
+    validate_code(source, allow_unsafe=settings.allow_unsafe)
+    namespace: dict[str, Any] = {}
+    exec(compile(source, filename, "exec"), namespace)
+    candidate = namespace.get(function_name)
+    if not callable(candidate):
+        raise ValueError(f"source did not define callable {function_name!r}")
+    if on_executed is not None:
+        on_executed(source, namespace)
+    return candidate
+
 
 def run_user_callable(
     func: Callable[[], Any], timeout: float

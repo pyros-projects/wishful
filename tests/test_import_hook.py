@@ -674,3 +674,24 @@ def test_dynamic_writes_snapshot(monkeypatch):
     assert path.exists()
     assert "ping" in path.read_text()
     assert call_count["n"] >= 2
+
+
+def test_injectable_generate_fn(tmp_path):
+    """MagicLoader.generate_fn replaces the LLM client without monkeypatching (R14)."""
+    import importlib.util
+
+    from wishful.core.loader import MagicLoader
+
+    calls = []
+
+    def injected(module, functions, context, **kwargs):
+        calls.append((module, tuple(functions)))
+        return "def hello():\n    return 'injected'\n"
+
+    loader_obj = MagicLoader("wishful.static.injected_demo", generate_fn=injected)
+    spec = importlib.util.spec_from_loader("wishful.static.injected_demo", loader_obj)
+    module = importlib.util.module_from_spec(spec)
+    loader_obj.exec_module(module)
+
+    assert module.hello() == "injected"
+    assert calls and calls[0][0] == "wishful.static.injected_demo"
