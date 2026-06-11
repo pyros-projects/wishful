@@ -10,10 +10,22 @@ class SecurityError(WishfulError, ImportError):
     """Raised when generated code violates safety policy."""
 
 
-# Module imports that are never allowed in generated code. importlib/builtins/
-# ctypes are included because they are the obvious escape hatches around the
-# os/subprocess/sys block.
-_FORBIDDEN_IMPORTS = {"os", "subprocess", "sys", "importlib", "builtins", "ctypes"}
+# Module imports that are never allowed in generated code. Beyond the obvious
+# os/subprocess/sys, this blocks the well-known escape hatches and code/file
+# execution modules. This is a BLOCKLIST and is therefore incomplete by nature —
+# see validate_code's docstring; untrusted input needs an out-of-process sandbox.
+_FORBIDDEN_IMPORTS = {
+    "os", "subprocess", "sys", "importlib", "builtins", "ctypes",
+    "runpy", "pickle", "marshal", "shutil", "code", "codeop",
+    "socket", "multiprocessing", "pty", "fcntl",
+}
+
+# Attribute-call method names that write files or execute code, blocked
+# regardless of the base object (e.g. pathlib.Path(p).write_text, runpy.run_path).
+_FORBIDDEN_METHODS = {
+    "write_text", "write_bytes", "run_path", "run_module", "exec_module",
+    "system", "popen", "spawn",
+}
 
 # Bare-name calls that are never allowed (direct or via the __import__ gadget).
 _FORBIDDEN_CALLS = {"eval", "exec", "compile", "__import__"}
@@ -44,10 +56,13 @@ _ESCAPE_ATTRS = {
 }
 
 # String keys that must not appear as a subscript, regardless of the base object,
-# to block ns['__builtins__']['eval'] style gadget chains.
+# to block ns['__builtins__']['eval'] and type.__dict__['__subclasses__'] gadgets.
+# Includes the escape dunders so the subscript form mirrors the attribute form.
 _FORBIDDEN_SUBSCRIPT_KEYS = {
     "__builtins__", "__globals__", "__code__",
     "eval", "exec", "compile", "__import__", "system", "popen",
+    "__subclasses__", "__bases__", "__base__", "__mro__", "__subclasshook__",
+    "__closure__", "__getattribute__",
 }
 
 # Literal attribute names that getattr/setattr/delattr/hasattr must not resolve —
@@ -204,6 +219,8 @@ def _check_reflection_call(func_name: str, call: ast.Call) -> None:
 
 
 def _check_attribute_call(attr: ast.Attribute, bound_names: set[str]) -> None:
+    if attr.attr in _FORBIDDEN_METHODS:
+        raise SecurityError(f"Forbidden method call: .{attr.attr}()")
     base = _attribute_base(attr)
     if base is not None and base in _UNBOUND_ATTR_BASES and base not in bound_names:
         raise SecurityError(f"Forbidden call on unbound '{base}'")
@@ -286,10 +303,18 @@ def validate_code(source: str, *, allow_unsafe: bool = False) -> None:
     """Perform light-weight static checks on generated code.
 
     This is defense-in-depth, NOT a sandbox. It blocks the obvious dangerous
-    constructs (forbidden imports/builtins, exec gadgets, write-mode file I/O) so
-    a careless generation is caught, but AST scanning cannot stop a determined
-    attacker — aliased or computed access slips through. Generated code still
-    executes in-process; only an out-of-process sandbox makes that truly safe.
+    constructs (forbidden imports/builtins, exec and introspection gadgets,
+    write-mode file I/O) so a careless generation is caught.
+
+    It is a **blocklist**, and a blocklist over Python is fundamentally
+    incomplete: the standard library has many file-write and code-execution
+    paths (``runpy``, ``pickle``, ``shutil``, ``pathlib`` write methods, …) and
+    runtime reflection (``operator.attrgetter``, value-built attribute names)
+    that AST scanning cannot fully enumerate or follow. A determined attacker can
+    get past it. **The real security boundary is the review gate plus running
+    wishful in an environment where arbitrary code execution is acceptable (or an
+    out-of-process sandbox).** Treat this scan as a seatbelt, not a vault.
+
     Users can opt out entirely with ``allow_unsafe=True``.
     """
 

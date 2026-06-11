@@ -49,6 +49,15 @@ BLOCKED = [
     "x = getattr(o, '__bases__')",
     "setattr(o, '__globals__', 1)",
     "a='__class__'\nb='__bases__'\nc='__subclasses__'\nx=()\ny=getattr(x,a)\nz=getattr(y,b)[0]\nw=getattr(z,c)()",
+    # Escape dunders via subscript (mirror of the attribute form):
+    "m = type.__dict__['__subclasses__'](object)",
+    # Code/file execution modules and write methods:
+    "import runpy\nrunpy.run_path('x')",
+    "import pickle",
+    "import shutil",
+    "import marshal",
+    "import pathlib\npathlib.Path('x').write_text('y')",
+    "obj.write_bytes(b'data')",
 ]
 
 # Legitimate code that must keep passing — including a shadowed `os` local,
@@ -64,6 +73,9 @@ ALLOWED = [
     "data = {'a': 1}\nv = data['a']",
     "result = sorted([3, 1, 2])",
     "name = obj.__class__.__name__",   # common introspection stays allowed
+    "import pathlib\nt = pathlib.Path('x').read_text()",   # reading is fine
+    "import json\nd = json.loads('{}')",                   # json.loads is fine
+    "d = {}\nv = d.get('k')",                              # dict.get is fine
     # Every binding form that introduces a local `os`/`sys`/`subprocess` must
     # suppress the unbound-base check (no false positives):
     "os, sys = 'x', 'y'\nif os.lower() == sys.upper():\n    pass",   # tuple unpack
