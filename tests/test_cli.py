@@ -77,6 +77,23 @@ def test_cli_regen_rejects_traversal_module_name(capsys):
     assert "error" in payload
 
 
+def test_cli_regen_module_name_validation():
+    # Reserved wishful.* names must be fully-qualified static/dynamic.
+    assert cli._valid_module("wishful.static.text") is True
+    assert cli._valid_module("wishful.dynamic.story") is True
+    assert cli._valid_module("users") is True  # bare -> static namespace
+    assert cli._valid_module("wishful") is False
+    assert cli._valid_module("wishful.text") is False  # framework package, not static/dynamic
+    assert cli._valid_module("../etc/passwd") is False
+    assert cli._valid_module("a/b") is False
+
+
+def test_cli_regen_rejects_framework_package(capsys):
+    code = cli.main(["regen", "wishful", "--json"])
+    assert code == 1
+    assert "error" in json.loads(capsys.readouterr().out)
+
+
 def test_cli_regen_missing_module_is_usage_error():
     with pytest.raises(SystemExit) as exc:
         cli.main(["regen"])

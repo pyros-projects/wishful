@@ -23,7 +23,12 @@ _BARE_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*(\.[A-Za-z_][A-Za-z0-9_]*)*$")
 
 
 def _valid_module(name: str) -> bool:
-    return bool(_FULL_RE.match(name) or _BARE_RE.match(name))
+    # A wishful.* name must be a fully-qualified static/dynamic module; a bare
+    # name (mapped into the static namespace by regenerate) must not itself start
+    # with the reserved 'wishful' prefix, so `wishful regen wishful` is rejected.
+    if name.startswith("wishful"):
+        return bool(_FULL_RE.match(name))
+    return bool(_BARE_RE.match(name))
 
 
 def _emit_error(msg: str, as_json: bool) -> None:
