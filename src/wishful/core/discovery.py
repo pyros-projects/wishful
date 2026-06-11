@@ -100,7 +100,9 @@ def _is_plain_import(fullname: str, tree: ast.AST) -> bool:
 
 
 def _matches_import_from(module: str | None, fullname: str) -> bool:
-    return bool(module) and module.startswith("wishful") and fullname.startswith(module)
+    if not module:
+        return False
+    return module.startswith("wishful") and fullname.startswith(module)
 
 
 def _matches_import(name: str, fullname: str) -> bool:

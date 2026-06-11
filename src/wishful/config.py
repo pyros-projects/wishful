@@ -98,7 +98,7 @@ class Settings:
 # wishful.* modules). Stash it on `builtins` so all imports share the same
 # instance even after sys.modules churn.
 if getattr(builtins, "_wishful_settings", None) is None:
-    builtins._wishful_settings = Settings()
+    builtins._wishful_settings = Settings()  # type: ignore[attr-defined]  # dynamic stash on builtins
 settings = builtins._wishful_settings  # type: ignore[attr-defined]
 
 

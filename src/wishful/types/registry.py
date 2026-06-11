@@ -11,10 +11,11 @@ import types as _types
 from dataclasses import MISSING
 from dataclasses import fields as dataclass_fields
 from dataclasses import is_dataclass
-from typing import Any, Callable, TypeVar, Union, get_args, get_origin, get_type_hints
+from typing import Any, Callable, Type, TypeVar, Union, get_args, get_origin, get_type_hints
 
 _UNION_TYPE = getattr(_types, "UnionType", None)  # PEP 604 X | Y (3.10+)
 _NONE_TYPE = type(None)  # captured before this module shadows builtin ``type``
+_Class = type  # alias for the builtin so annotations survive the ``type`` shadow below
 
 T = TypeVar("T")
 
@@ -29,7 +30,7 @@ class TypeRegistry:
         self._function_outputs: dict[str, str] = {}
 
     def register(
-        self, type_class: type, *, output_for: str | list[str] | None = None
+        self, type_class: _Class, *, output_for: str | list[str] | None = None
     ) -> None:
         """Register a type and optionally associate it with function(s)."""
         schema = self._serialize_type(type_class)
@@ -57,7 +58,7 @@ class TypeRegistry:
         self._types.clear()
         self._function_outputs.clear()
 
-    def _serialize_type(self, type_class: type) -> str:
+    def _serialize_type(self, type_class: _Class) -> str:
         """Serialize a type to a string representation for the LLM."""
         # Check if it's a Pydantic model
         if self._is_pydantic_model(type_class):
@@ -78,7 +79,7 @@ class TypeRegistry:
             # Last resort: just return the class definition line
             return f"class {type_class.__name__}: ..."
 
-    def _is_pydantic_model(self, type_class: type) -> bool:
+    def _is_pydantic_model(self, type_class: _Class) -> bool:
         """Check if a class is a Pydantic BaseModel."""
         try:
             # Check if BaseModel is in the MRO or has model_fields
@@ -88,7 +89,7 @@ class TypeRegistry:
         except (AttributeError, TypeError):
             return False
 
-    def _serialize_pydantic(self, model_class: type) -> str:
+    def _serialize_pydantic(self, model_class: _Class) -> str:
         """Serialize a Pydantic model to source code."""
         lines = [f"class {model_class.__name__}(BaseModel):"]
 
@@ -203,7 +204,7 @@ class TypeRegistry:
         
         return ", ".join(args)
 
-    def _serialize_dataclass(self, dc_class: type) -> str:
+    def _serialize_dataclass(self, dc_class: _Class) -> str:
         """Serialize a dataclass to source code."""
         lines = ["@dataclass", f"class {dc_class.__name__}:"]
 
@@ -232,7 +233,7 @@ class TypeRegistry:
 
         return "\n".join(lines)
 
-    def _is_typed_dict(self, type_class: type) -> bool:
+    def _is_typed_dict(self, type_class: _Class) -> bool:
         """Check if a class is a TypedDict."""
         try:
             return hasattr(type_class, "__annotations__") and hasattr(
@@ -241,7 +242,7 @@ class TypeRegistry:
         except AttributeError:
             return False
 
-    def _serialize_typed_dict(self, td_class: type) -> str:
+    def _serialize_typed_dict(self, td_class: _Class) -> str:
         """Serialize a TypedDict to source code."""
         lines = [f"class {td_class.__name__}(TypedDict):"]
 
@@ -302,8 +303,8 @@ _registry = TypeRegistry()
 
 
 def type(
-    cls: type[T] | None = None, *, output_for: str | list[str] | None = None
-) -> type[T] | Callable[[type[T]], type[T]]:
+    cls: Type[T] | None = None, *, output_for: str | list[str] | None = None
+) -> Type[T] | Callable[[Type[T]], Type[T]]:
     """Decorator to register a type with wishful.
 
     Usage:
@@ -325,7 +326,7 @@ def type(
             email: str
     """
 
-    def decorator(type_class: type[T]) -> type[T]:
+    def decorator(type_class: Type[T]) -> Type[T]:
         _registry.register(type_class, output_for=output_for)
         return type_class
 

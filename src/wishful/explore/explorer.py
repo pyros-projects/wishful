@@ -365,7 +365,7 @@ async def _generate_and_evaluate_async(
                 continue
 
             # Attach source to function so benchmark can access it
-            fn.__wishful_source__ = source
+            fn.__wishful_source__ = source  # type: ignore[attr-defined]  # dynamic marker
 
             # Test/benchmark
             try:

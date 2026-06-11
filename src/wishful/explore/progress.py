@@ -7,7 +7,7 @@ import time
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
-from typing import List, Optional
+from typing import Any, List, Optional
 
 from rich.console import Console, Group
 from rich.live import Live
@@ -193,7 +193,7 @@ class AsyncExploreLiveDisplay:
         """Render the full progress display."""
         p = self.progress
 
-        content_parts = []
+        content_parts: list[Any] = []  # mixed rich renderables (Progress, Table, ...)
 
         # Progress bar
         if self._progress_bar:

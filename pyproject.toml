@@ -28,6 +28,14 @@ markers = [
     "smoke: real-model smoke test, run only with WISHFUL_SMOKE=1 and credentials",
 ]
 
+[tool.mypy]
+python_version = "3.12"
+
+[[tool.mypy.overrides]]
+# nest_asyncio ships no type stubs / py.typed marker.
+module = "nest_asyncio"
+ignore_missing_imports = true
+
 [tool.coverage.run]
 source = ["wishful"]
 # Generated cache modules are exec'd from temp dirs during tests; don't try to
