@@ -70,6 +70,26 @@ def test_static_module_path_unchanged():
     assert p == manager.settings.cache_dir / "text.py"
 
 
+import pytest
+
+
+@pytest.mark.parametrize(
+    "bad_name",
+    [
+        "wishful.static.../../etc/passwd",
+        "wishful.static.a/b",
+        "users/../../etc",
+        "wishful.static..__init__",
+        "wishful.static.\\windows",
+    ],
+)
+def test_module_path_rejects_traversal(bad_name):
+    with pytest.raises(ValueError):
+        manager.module_path(bad_name)
+    with pytest.raises(ValueError):
+        manager.dynamic_snapshot_path(bad_name)
+
+
 def test_delete_dynamic_does_not_touch_static(tmp_path):
     manager.write_cached("wishful.static.shared", "def s():\n    return 'static'\n")
     manager.write_dynamic_snapshot("wishful.dynamic.shared", "def d():\n    return 'dyn'\n")

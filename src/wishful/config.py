@@ -71,6 +71,9 @@ class Settings:
     log_level: str = field(default_factory=lambda: os.getenv("WISHFUL_LOG_LEVEL", "WARNING").upper())
     # Opt-in: a library must not create files in the user's CWD just on import.
     log_to_file: bool = field(default_factory=lambda: os.getenv("WISHFUL_LOG_TO_FILE", "0") == "1")
+    # Opt-in: prompt/context bodies (which can contain the caller's code and
+    # secrets) are redacted from logs unless explicitly enabled, even at DEBUG.
+    log_prompts: bool = field(default_factory=lambda: os.getenv("WISHFUL_LOG_PROMPTS", "0") == "1")
     request_timeout: float = field(default_factory=lambda: float(os.getenv("WISHFUL_REQUEST_TIMEOUT", "300")))
 
     def copy(self) -> "Settings":
@@ -86,6 +89,7 @@ class Settings:
             system_prompt=self.system_prompt,
             log_level=self.log_level,
             log_to_file=self.log_to_file,
+            log_prompts=self.log_prompts,
             request_timeout=self.request_timeout,
         )
 
@@ -133,6 +137,7 @@ def configure(
     system_prompt: Optional[str] = None,
     log_level: Optional[str] = None,
     log_to_file: Optional[bool] = None,
+    log_prompts: Optional[bool] = None,
     request_timeout: Optional[float] = None,
 ) -> None:
     """Update global settings in-place.
@@ -153,6 +158,7 @@ def configure(
         "system_prompt": system_prompt,
         "log_level": log_level.upper() if isinstance(log_level, str) else log_level,
         "log_to_file": log_to_file,
+        "log_prompts": log_prompts,
         "request_timeout": request_timeout,
     }
 
@@ -193,6 +199,7 @@ def reset_defaults() -> None:
     settings.system_prompt = defaults.system_prompt
     settings.log_level = defaults.log_level
     settings.log_to_file = defaults.log_to_file
+    settings.log_prompts = defaults.log_prompts
     settings.request_timeout = defaults.request_timeout
 
     logging_mod = _load_logging_module()

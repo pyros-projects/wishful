@@ -16,6 +16,41 @@ def _latest_log(cache_dir: Path) -> Path | None:
     return logs[-1] if logs else None
 
 
+def _capture_log_call(**configure_kwargs) -> str:
+    from wishful.llm import client
+
+    records: list[str] = []
+    sink_id = loguru_logger.add(lambda m: records.append(str(m)), level="DEBUG")
+    try:
+        wishful.configure(**configure_kwargs)
+        client._log_llm_call(
+            "wishful.static.x",
+            "static",
+            ["f"],
+            "SECRET_CONTEXT_sk-abc123",
+            None,
+            None,
+            [{"role": "user", "content": "SECRET_PROMPT_sk-abc123"}],
+        )
+        return "".join(records)
+    finally:
+        loguru_logger.remove(sink_id)
+        wishful.configure(log_prompts=False)
+
+
+def test_prompt_bodies_redacted_by_default():
+    text = _capture_log_call(log_prompts=False)
+    assert "SECRET_CONTEXT" not in text
+    assert "SECRET_PROMPT" not in text
+    assert "redacted" in text
+
+
+def test_prompt_bodies_logged_when_opted_in():
+    text = _capture_log_call(log_prompts=True)
+    assert "SECRET_CONTEXT" in text
+    assert "SECRET_PROMPT" in text
+
+
 def test_logging_creates_file_and_records_generation(monkeypatch):
     call_count = {"n": 0}
 

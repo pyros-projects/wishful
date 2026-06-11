@@ -405,6 +405,7 @@ All settings can also be configured via environment variables:
 - `WISHFUL_CONTEXT_RADIUS` - Context lines around imports and call sites (integer)
 - `WISHFUL_LOG_LEVEL` - Logging level (DEBUG, INFO, WARNING, ERROR)
 - `WISHFUL_LOG_TO_FILE` - File logging is **off by default**; set to `"1"` to enable
+- `WISHFUL_LOG_PROMPTS` - Off by default; set to `"1"` to log prompt/context bodies (which may contain your source or secrets) at DEBUG
 - `WISHFUL_SYSTEM_PROMPT` - Custom system prompt
 - `WISHFUL_FAKE_LLM` - Set to `"1"` for deterministic stub generation (testing)
 

@@ -1,12 +1,33 @@
 from __future__ import annotations
 
 import os
+import re
 import shutil
 import tempfile
 from pathlib import Path
 from typing import List, Optional
 
 from wishful.config import settings
+
+# Each module-name component must be a plain Python identifier. This rejects path
+# separators, '..', absolute segments, and other traversal payloads at the source
+# so a crafted module name can never be mapped to a file outside the cache dir.
+_SAFE_COMPONENT = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
+
+
+def _validate_components(parts: list[str], fullname: str) -> None:
+    for part in parts:
+        if not _SAFE_COMPONENT.match(part):
+            raise ValueError(f"unsafe module name {fullname!r}: bad component {part!r}")
+
+
+def _within_cache(path: Path) -> Path:
+    """Resolve ``path`` and confirm it stays inside the cache dir (symlink-safe)."""
+    cache_root = settings.cache_dir.resolve()
+    resolved = path.resolve()
+    if resolved != cache_root and cache_root not in resolved.parents:
+        raise ValueError(f"resolved cache path escapes the cache dir: {resolved}")
+    return path
 
 
 def _atomic_write(path: Path, source: str) -> None:
@@ -53,16 +74,18 @@ def module_path(fullname: str) -> Path:
     namespaces can never address the same file.
     """
     namespace, parts = _split_namespace(fullname)
+    _validate_components(parts, fullname)
     relative = Path(*parts) if parts else Path("__init__")
     base = settings.cache_dir / "_dynamic" if namespace == "dynamic" else settings.cache_dir
-    return base / relative.with_suffix(".py")
+    return _within_cache(base / relative.with_suffix(".py"))
 
 
 def dynamic_snapshot_path(fullname: str) -> Path:
     """Path for a dynamic-generation snapshot (always under ``_dynamic/``)."""
     _, parts = _split_namespace(fullname)
+    _validate_components(parts, fullname)
     relative = Path(*parts) if parts else Path("__init__")
-    return settings.cache_dir / "_dynamic" / relative.with_suffix(".py")
+    return _within_cache(settings.cache_dir / "_dynamic" / relative.with_suffix(".py"))
 
 
 def ensure_cache_dir() -> Path:

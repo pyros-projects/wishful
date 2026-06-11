@@ -169,6 +169,14 @@ def _log_llm_call(
     messages: list,
 ) -> None:
     """Log LLM call details."""
+    # The context preview and prompt bodies can contain the caller's source and
+    # secrets, so they are redacted unless log_prompts is explicitly enabled.
+    context_len = len(context) if context else 0
+    preview = (
+        (context[:500] + "…" if context and len(context) > 500 else (context or ""))
+        if settings.log_prompts
+        else f"<redacted {context_len} chars; set WISHFUL_LOG_PROMPTS=1 to log>"
+    )
     logger.debug(
         "LLM call module={} mode={} model={} temp={} max_tokens={} functions={} context_len={} type_schemas={} output_types={} preview={}",
         module,
@@ -177,17 +185,17 @@ def _log_llm_call(
         settings.temperature,
         settings.max_tokens,
         list(functions),
-        len(context) if context else 0,
+        context_len,
         list((type_schemas or {}).keys()),
         list((function_output_types or {}).keys()),
-        (context[:500] + "…" if context and len(context) > 500 else (context or "")),
+        preview,
     )
 
-    # Log the actual prompt messages (truncated for safety)
-    prompt_text = "\n".join(f"{m['role'].upper()}: {m['content']}" for m in messages)
-    if len(prompt_text) > 4000:
-        prompt_text = prompt_text[:4000] + "…"
-    logger.debug("LLM prompt for {}:\n{}", module, prompt_text)
+    if settings.log_prompts:
+        prompt_text = "\n".join(f"{m['role'].upper()}: {m['content']}" for m in messages)
+        if len(prompt_text) > 4000:
+            prompt_text = prompt_text[:4000] + "…"
+        logger.debug("LLM prompt for {}:\n{}", module, prompt_text)
 
 
 def _extract_content(response) -> str:
