@@ -158,3 +158,68 @@ def test_cache_path_keeps_namespaces_disjoint():
     assert dynamic != static
     assert "_dynamic" in dynamic.parts
     assert "_dynamic" not in static.parts
+
+
+# --- U15: API surface -------------------------------------------------------
+
+
+def test_exception_hierarchy_under_wishful_error():
+    from wishful import (
+        EvolutionError,
+        ExplorationError,
+        GenerationError,
+        SecurityError,
+        WishfulError,
+    )
+
+    for exc in (SecurityError, GenerationError, ExplorationError, EvolutionError):
+        assert issubclass(exc, WishfulError)
+    # The generation/safety errors still surface as ImportError.
+    assert issubclass(SecurityError, ImportError)
+    assert issubclass(GenerationError, ImportError)
+
+
+def test_subpackage_all_names_are_reachable():
+    # The wishful.explore / wishful.evolve *attributes* are the top-level
+    # explore()/evolve() functions (the documented API), so sub-items are reached
+    # via the actual module; every __all__ name must resolve there.
+    import importlib
+
+    ex = importlib.import_module("wishful.explore")
+    ev = importlib.import_module("wishful.evolve")
+    for name in ex.__all__:
+        assert hasattr(ex, name), f"wishful.explore.{name} missing"
+    for name in ev.__all__:
+        assert hasattr(ev, name), f"wishful.evolve.{name} missing"
+    # And the direct from-import path works for a representative internal symbol.
+    from wishful.explore import ExploreProgress  # noqa: F401
+    from wishful.evolve import EvolutionHistory  # noqa: F401
+
+
+def test_star_import_does_not_shadow_builtin_type():
+    import subprocess
+
+    code = (
+        "from wishful import *\n"
+        "assert type(5) is int\n"
+        "import wishful\n"
+        "assert wishful.type is not None\n"
+        "assert 'type' not in getattr(__import__('wishful'), '__all__')\n"
+        "print('ok')\n"
+    )
+    r = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True)
+    assert r.returncode == 0, r.stderr
+
+
+def test_cache_subpackage_not_shadowed_by_alias():
+    import subprocess
+
+    code = (
+        "import wishful\n"
+        "import wishful.cache.manager\n"
+        "assert hasattr(wishful.cache, 'read_cached'), 'wishful.cache is not the subpackage'\n"
+        "assert wishful.cache.manager.module_path('wishful.static.x').name == 'x.py'\n"
+        "print('ok')\n"
+    )
+    r = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True)
+    assert r.returncode == 0, r.stderr

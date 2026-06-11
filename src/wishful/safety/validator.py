@@ -3,8 +3,10 @@ from __future__ import annotations
 import ast
 from typing import Iterable
 
+from wishful.exceptions import WishfulError
 
-class SecurityError(ImportError):
+
+class SecurityError(WishfulError, ImportError):
     """Raised when generated code violates safety policy."""
 
 

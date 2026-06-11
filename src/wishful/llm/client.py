@@ -7,11 +7,12 @@ from typing import Sequence
 import litellm
 
 from wishful.config import settings
+from wishful.exceptions import WishfulError
 from wishful.llm.prompts import build_messages, strip_code_fences
 from wishful.logging import logger
 
 
-class GenerationError(ImportError):
+class GenerationError(WishfulError, ImportError):
     """Raised when the LLM call fails or returns empty output."""
 
 

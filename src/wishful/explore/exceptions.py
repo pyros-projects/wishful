@@ -4,8 +4,10 @@ from __future__ import annotations
 
 from typing import List
 
+from wishful.exceptions import WishfulError
 
-class ExplorationError(Exception):
+
+class ExplorationError(WishfulError):
     """Raised when no variant passes the tests."""
 
     def __init__(self, message: str, attempts: int, failures: List[str]):

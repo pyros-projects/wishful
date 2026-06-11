@@ -2,8 +2,10 @@
 
 from typing import Callable, Optional
 
+from wishful.exceptions import WishfulError
 
-class EvolutionError(Exception):
+
+class EvolutionError(WishfulError):
     """Raised when evolution fails to produce valid results."""
 
     def __init__(
