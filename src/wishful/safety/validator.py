@@ -55,12 +55,14 @@ _ESCAPE_ATTRS = {
     "__globals__", "__code__", "__closure__", "__builtins__", "__getattribute__",
 }
 
-# String keys that must not appear as a subscript, regardless of the base object,
+# Dunder keys that must not appear as a subscript, regardless of the base object,
 # to block ns['__builtins__']['eval'] and type.__dict__['__subclasses__'] gadgets.
-# Includes the escape dunders so the subscript form mirrors the attribute form.
+# Only dunder escape names are listed — plain words like 'system'/'eval' are
+# common legitimate dict keys (config['system'], row['eval']), and the real
+# gadgets reaching builtins are already caught by the __builtins__ /
+# globals()/vars()/locals() base checks above.
 _FORBIDDEN_SUBSCRIPT_KEYS = {
     "__builtins__", "__globals__", "__code__",
-    "eval", "exec", "compile", "__import__", "system", "popen",
     "__subclasses__", "__bases__", "__base__", "__mro__", "__subclasshook__",
     "__closure__", "__getattribute__",
 }
@@ -210,12 +212,16 @@ def _check_reflection_call(func_name: str, call: ast.Call) -> None:
     if len(call.args) < 2:
         return
     name_node = call.args[1]
-    if not (isinstance(name_node, ast.Constant) and isinstance(name_node.value, str)):
-        raise SecurityError(
-            f"{func_name}() with a non-literal attribute name is blocked"
-        )
-    if name_node.value in _FORBIDDEN_GETATTR_NAMES:
-        raise SecurityError(f"{func_name}() for forbidden attribute {name_node.value!r}")
+    # Block a forbidden *literal* attribute name (getattr(o, '__globals__'),
+    # getattr(o, 'open')). A non-literal name — getattr(obj, field) — is the
+    # extremely common reflective idiom; blocking it broke ordinary generated
+    # code, so a variable/computed name is left as a documented residual (this is
+    # a best-effort blocklist, not a sandbox — see validate_code's docstring).
+    if isinstance(name_node, ast.Constant) and isinstance(name_node.value, str):
+        if name_node.value in _FORBIDDEN_GETATTR_NAMES:
+            raise SecurityError(
+                f"{func_name}() for forbidden attribute {name_node.value!r}"
+            )
 
 
 def _check_attribute_call(attr: ast.Attribute, bound_names: set[str]) -> None:

@@ -42,13 +42,10 @@ BLOCKED = [
     "g = {'__builtins__': 1}\ne = g['__builtins__']['eval']",
     "x = obj.__getattribute__('eval')",
     "m = something.__mro__",
-    # getattr with computed/variable attribute names (escape via indirection):
-    "a = '__class__'\ny = getattr((), a)",
-    "s = 'sy' + 'stem'\ng = getattr(o, s)",
+    # getattr with a forbidden *literal* attribute name stays blocked:
     "f = getattr(globals().get('__builtins__'), 'open')",
     "x = getattr(o, '__bases__')",
     "setattr(o, '__globals__', 1)",
-    "a='__class__'\nb='__bases__'\nc='__subclasses__'\nx=()\ny=getattr(x,a)\nz=getattr(y,b)[0]\nw=getattr(z,c)()",
     # Escape dunders via subscript (mirror of the attribute form):
     "m = type.__dict__['__subclasses__'](object)",
     # Code/file execution modules and write methods:
@@ -76,6 +73,11 @@ ALLOWED = [
     "import pathlib\nt = pathlib.Path('x').read_text()",   # reading is fine
     "import json\nd = json.loads('{}')",                   # json.loads is fine
     "d = {}\nv = d.get('k')",                              # dict.get is fine
+    "v = getattr(record, field_name)",                     # reflective getattr is common
+    "d = {f: getattr(o, f) for f in fields}",              # ...so is the dict-comp form
+    "x = config['system']",                                # plain-word dict keys are data
+    "y = row['eval']",
+    "z = data['popen']",
     # Every binding form that introduces a local `os`/`sys`/`subprocess` must
     # suppress the unbound-base check (no false positives):
     "os, sys = 'x', 'y'\nif os.lower() == sys.upper():\n    pass",   # tuple unpack
@@ -98,6 +100,10 @@ ALLOWED = [
 RESIDUAL_BYPASSES = [
     "import operator\nf = operator.attrgetter('__class__')",   # reflection via operator module
     "m = {}.get('__builtins__')",                              # builtins via an arbitrary mapping's .get()
+    "a = '__class__'\ny = getattr((), a)",                     # getattr with a variable name
+    "s = 'sy' + 'stem'\ng = getattr(o, s)",                    # getattr with a computed name
+    # variable-indexed gadget chain — the cost of allowing getattr(obj, field):
+    "a='__class__'\nb='__bases__'\nc='__subclasses__'\nx=()\ny=getattr(x,a)\nz=getattr(y,b)[0]\nw=getattr(z,c)()",
 ]
 
 

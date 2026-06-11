@@ -64,6 +64,48 @@ class TestWinnerMerge:
         exec(merged, ns)
         assert ns["a"]() == 1 and ns["b"]() == 3
 
+    def test_merge_hoists_future_import_and_compiles(self):
+        from wishful.explore.explorer import _merge_into_module
+
+        existing = "def keep():\n    return 1\n"
+        winner = "from __future__ import annotations\n\ndef target(x: list) -> int:\n    return len(x)\n"
+        merged = _merge_into_module(existing, "target", winner)
+        compile(merged, "<test>", "exec")  # would raise if __future__ were mid-file
+        assert merged.startswith("from __future__ import annotations")
+
+    def test_dangerous_sibling_does_not_sink_winner(self, monkeypatch, tmp_path):
+        import wishful
+        from wishful.cache import manager
+
+        wishful.configure(cache_dir=tmp_path / ".wishful")
+        # A pre-existing sibling contains forbidden code the caller never touched.
+        manager.write_cached(
+            "wishful.static.text",
+            "import os\n\n\ndef danger():\n    return os.getcwd()\n",
+        )
+
+        def fake_generate(module, functions, context, **kwargs):
+            return "def extract(s):\n    return s.upper()\n"
+
+        monkeypatch.setattr(
+            explorer_module, "agenerate_module_code", make_async_fake(fake_generate)
+        )
+
+        winner = explore(
+            "wishful.static.text.extract",
+            variants=1,
+            test=lambda fn: fn("x") == "X",
+            verbose=False,
+            save_results=False,
+        )
+        # explore must still return the valid winner (contract), and cache it alone
+        # rather than the merge that would re-introduce the dangerous sibling.
+        assert winner("hi") == "HI"
+        cached = manager.read_cached("wishful.static.text")
+        assert "import os" not in cached
+        assert "def extract" in cached
+        manager.clear_cache()
+
 
 class TestExploreBasic:
     """Basic explore functionality."""

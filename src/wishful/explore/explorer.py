@@ -6,6 +6,7 @@ import ast
 import asyncio
 import atexit
 import os
+import re
 import sys
 import time
 import warnings
@@ -21,7 +22,7 @@ from wishful.explore.progress import (
 )
 from wishful.explore.variant import VariantMetadata, wrap_with_metadata
 from wishful.llm.client import agenerate_module_code
-from wishful.safety.validator import validate_code
+from wishful.safety.validator import SecurityError, validate_code
 
 # Suppress litellm's async cleanup warnings at module level (they're harmless)
 warnings.filterwarnings(
@@ -116,7 +117,38 @@ def _merge_into_module(existing, function_name: str, winner_source: str) -> str:
         prefix = ast.unparse(tree).rstrip()
     if not prefix.strip():
         return winner_source
-    return prefix + "\n\n\n" + winner_source.lstrip()
+    merged = _hoist_future_imports(prefix + "\n\n\n" + winner_source.lstrip())
+    # ast.parse (used by the validator) does not enforce __future__ placement, but
+    # compile() does — verify the merged file actually compiles, else fall back to
+    # the winner alone so a broken cache is never written.
+    try:
+        compile(merged, "<wishful-merge>", "exec")
+    except SyntaxError:
+        return winner_source
+    return merged
+
+
+_FUTURE_RE = re.compile(r"^[ \t]*from[ \t]+__future__[ \t]+import[ \t]+.*$", re.MULTILINE)
+
+
+def _hoist_future_imports(source: str) -> str:
+    """Move every ``from __future__ import ...`` to the top (deduped).
+
+    A merged module can end up with a __future__ import after the first sibling
+    symbol, which compiles to a SyntaxError. Collect them and emit a single
+    leading block.
+    """
+    futures = _FUTURE_RE.findall(source)
+    if not futures:
+        return source
+    features: list[str] = []
+    for line in futures:
+        for name in line.split("import", 1)[1].split(","):
+            name = name.strip()
+            if name and name not in features:
+                features.append(name)
+    body = _FUTURE_RE.sub("", source).lstrip("\n")
+    return f"from __future__ import {', '.join(features)}\n\n" + body
 
 
 def explore(
@@ -273,8 +305,15 @@ async def _explore_async(
         merged = _merge_into_module(
             read_cached(module_name), function_name, winner.__wishful_source__
         )
-        validate_code(merged, allow_unsafe=settings.allow_unsafe)
-        write_cached(module_name, merged)
+        # The merge may fold in a pre-existing dangerous sibling the caller never
+        # touched. That must not sink the valid winner we promised to return —
+        # fall back to caching the winner alone if the merged module won't validate.
+        try:
+            validate_code(merged, allow_unsafe=settings.allow_unsafe)
+            write_cached(module_name, merged)
+        except SecurityError:
+            validate_code(winner.__wishful_source__, allow_unsafe=settings.allow_unsafe)
+            write_cached(module_name, winner.__wishful_source__)
 
     return winner
 

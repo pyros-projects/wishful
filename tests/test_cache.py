@@ -70,9 +70,6 @@ def test_static_module_path_unchanged():
     assert p == manager.settings.cache_dir / "text.py"
 
 
-import pytest
-
-
 @pytest.mark.parametrize(
     "bad_name",
     [

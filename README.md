@@ -357,7 +357,7 @@ wishful.configure(
     review=True,                   # Review code before execution (default: False)
     allow_unsafe=False,            # Disable safety checks - dangerous! (default: False)
     temperature=0.7,               # LLM sampling temperature (default: 1.0)
-    max_tokens=8000,               # Maximum LLM response tokens (default: 4096)
+    max_tokens=16384,              # Maximum LLM response tokens (default: 16384)
     debug=True,                    # Enable debug logging (default: False)
     log_level="INFO",              # Logging level: DEBUG, INFO, WARNING, ERROR (default: WARNING)
     log_to_file=True,              # Write logs to cache_dir/_logs/ (default: False, opt-in)
@@ -381,7 +381,7 @@ _Your wish, your rules._
 | `spinner` | `bool` | `True` | Show spinner during LLM generation |
 | `allow_unsafe` | `bool` | `False` | Disable safety validation (use with caution!) |
 | `temperature` | `float` | `1.0` | LLM sampling temperature (0.0-2.0) |
-| `max_tokens` | `int` | `4096` | Maximum tokens for LLM response |
+| `max_tokens` | `int` | `16384` | Maximum tokens for LLM response (sized for reasoning models) |
 | `debug` | `bool` | `False` | Enable debug mode (sets log_level to DEBUG) |
 | `log_level` | `str` | `"WARNING"` | Logging level (DEBUG, INFO, WARNING, ERROR) |
 | `log_to_file` | `bool` | `False` | Write logs to `{cache_dir}/_logs/` (opt-in) |
