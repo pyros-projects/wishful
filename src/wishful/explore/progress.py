@@ -85,7 +85,9 @@ class ExploreProgress:
 
             if error:
                 result.status = "error"
-                result.error_message = error[:80]
+                # Store the FULL text — ExplorationError.failures must carry the
+                # whole diagnosis. Truncation belongs to the Rich renderer only.
+                result.error_message = error
             elif passed:
                 result.status = "passed"
                 if self.first_passing_index is None:
@@ -107,7 +109,8 @@ class ExploreProgress:
         """Record that a variant failed to compile."""
         if index < len(self.results):
             self.results[index].status = "error"
-            self.results[index].error_message = f"Compile: {error[:60]}"
+            # Full text; the Rich renderer truncates for display.
+            self.results[index].error_message = f"Compile: {error}"
 
     @property
     def completed_count(self) -> int:

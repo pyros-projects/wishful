@@ -91,6 +91,34 @@ class TestBoundedCandidates:
             )
 
 
+class TestFullFailureMessages:
+    """ExplorationError carries full, untruncated failure text (plan R6)."""
+
+    def test_failures_contain_full_exception_text(self, monkeypatch):
+        def fake_generate(module, functions, context, **kwargs):
+            return "def f():\n    return 1\n"
+
+        monkeypatch.setattr(
+            explorer_module, "agenerate_module_code", make_async_fake(fake_generate)
+        )
+
+        long_reason = "x" * 300  # far past any display width
+
+        def failing_test(fn):
+            raise ValueError(f"detailed diagnosis: {long_reason}")
+
+        with pytest.raises(ExplorationError) as exc_info:
+            explore(
+                "wishful.static.longmsg.f",
+                variants=1,
+                test=failing_test,
+                verbose=False,
+                save_results=False,
+            )
+        combined = "\n".join(exc_info.value.failures)
+        assert long_reason in combined  # nothing truncated the stored message
+
+
 class TestWinnerMerge:
     """Caching a winner must not clobber other symbols in the module."""
 
