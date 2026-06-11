@@ -1,0 +1,20 @@
+
+
+Traceback (most recent call last):
+  File "/home/pyro/projects/private/wishful/examples/10_cosmic_horror_line_by_line.py", line 5, in <module>
+    import wishful.dynamic.story as story
+  File "/home/pyro/projects/private/wishful/src/wishful/core/loader.py", line 93, in exec_module
+    source, from_cache, file_path = self._load_source(context)
+                                    ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/pyro/projects/private/wishful/src/wishful/core/loader.py", line 210, in _load_source
+    source, path = self._generate_and_cache(context.functions, context)
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/pyro/projects/private/wishful/src/wishful/core/loader.py", line 123, in _generate_and_cache
+    source = gen_fn(
+             ^^^^^^^
+  File "/home/pyro/projects/private/wishful/src/wishful/llm/client.py", line 46, in generate_module_code
+    content = _extract_content(response)
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/pyro/projects/private/wishful/src/wishful/llm/client.py", line 164, in _extract_content
+    raise GenerationError("LLM returned empty content")
+wishful.llm.client.GenerationError: LLM returned empty content

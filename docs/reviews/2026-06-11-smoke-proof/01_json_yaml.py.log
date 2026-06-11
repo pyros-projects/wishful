@@ -1,0 +1,10 @@
+
+
+Parsed JSON: {'name': 'Alice', 'age': 30, 'active': True}
+
+As YAML:
+name: Alice
+age: 30
+active: true
+
+EXIT=0 SECS=62

@@ -1,0 +1,57 @@
+
+🪄 Static vs Dynamic Namespaces in Wishful
+
+
+===================================
+Example 1: Static (Cached) Behavior
+===================================
+First import - generates code:
+
+
+  Result: Hello, Alice!
+
+Second import - uses cache, same result:
+  Result: Hello, Bob!
+  (Same function definition, just different input)
+
+=============================================
+Example 2: Dynamic (Runtime Context) Behavior
+=============================================
+Dynamic generation sees runtime arguments:
+
+Calling with topic='space':
+
+
+
+
+
+
+  Result: Build an interactive mission-planning dashboard for a small imaginary Mars rover. Users can choose landing sites, assign science goals, manage limited battery power, and watch the rover uncover discoveries such as mineral deposits, ice pockets, and strange terrain formations. The project could combine maps, simple resource strategy, and short educational notes about real planetary exploration.
+
+Calling with topic='cooking' (regenerates with new context):
+
+
+
+
+Traceback (most recent call last):
+  File "/home/pyro/projects/private/wishful/examples/08_dynamic_vs_static.py", line 128, in <module>
+    main()
+  File "/home/pyro/projects/private/wishful/examples/08_dynamic_vs_static.py", line 115, in main
+    example_dynamic_runtime()
+  File "/home/pyro/projects/private/wishful/examples/08_dynamic_vs_static.py", line 49, in example_dynamic_runtime
+    idea2 = ideas.generate_project_idea(topic="cooking")
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/pyro/projects/private/wishful/src/wishful/core/loader.py", line 61, in __getattribute__
+    loader._regenerate_for_proxy(self, name)
+  File "/home/pyro/projects/private/wishful/src/wishful/core/loader.py", line 259, in _regenerate_for_proxy
+    source, path = self._generate_and_cache(ctx.functions, ctx)
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/pyro/projects/private/wishful/src/wishful/core/loader.py", line 123, in _generate_and_cache
+    source = gen_fn(
+             ^^^^^^^
+  File "/home/pyro/projects/private/wishful/src/wishful/llm/client.py", line 46, in generate_module_code
+    content = _extract_content(response)
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/pyro/projects/private/wishful/src/wishful/llm/client.py", line 164, in _extract_content
+    raise GenerationError("LLM returned empty content")
+wishful.llm.client.GenerationError: LLM returned empty content

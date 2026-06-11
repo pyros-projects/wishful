@@ -1,0 +1,6 @@
+
+
+Extracted links: ['/about', 'https://example.com/blog?utm_source=test', 'mailto:test@example.com']
+
+Cleaned URL: https://example.com/page
+EXIT=0 SECS=27

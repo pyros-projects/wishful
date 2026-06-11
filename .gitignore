@@ -22,3 +22,5 @@ docs-site/dist/
 .claude/
 .memsearch/
 .pyro/
+
+.compound-engineering/*.local.yaml

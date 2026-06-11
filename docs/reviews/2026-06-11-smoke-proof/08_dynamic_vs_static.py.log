@@ -1,0 +1,34 @@
+
+🪄 Static vs Dynamic Namespaces in Wishful
+
+
+===================================
+Example 1: Static (Cached) Behavior
+===================================
+First import - generates code:
+
+
+  Result: Hello, Alice!
+
+Second import - uses cache, same result:
+  Result: Hello, Bob!
+  (Same function definition, just different input)
+
+=============================================
+Example 2: Dynamic (Runtime Context) Behavior
+=============================================
+Dynamic generation sees runtime arguments:
+
+Calling with topic='space':
+
+
+
+
+
+
+  Result: Build a citizen-science web app called Orbit Notes that lets users explore real telescope images, tag interesting objects, and gradually assemble a shared map of unusual patterns such as asteroid trails, satellite streaks, and possible supernova candidates. The project could include a calming star-map interface, short educational prompts, and a leaderboard that rewards careful observations rather than speed.
+
+Calling with topic='cooking' (regenerates with new context):
+
+
+EXIT=124 SECS=220
