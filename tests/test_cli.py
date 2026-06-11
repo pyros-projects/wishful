@@ -1,89 +1,89 @@
-"""Tests for the CLI interface."""
+"""Tests for the CLI interface.
 
-import sys
+Exit codes: 0 success, 1 runtime error, 2 usage error (argparse). main() returns
+the int code; argparse raises SystemExit(2) for usage errors.
+"""
+
+import importlib.metadata
+import json
 
 import pytest
 
+import wishful
 from wishful import __main__ as cli
 from wishful.cache import manager
 from wishful.config import configure
 
 
-def test_cli_no_args(monkeypatch, capsys):
-    """Test CLI with no arguments shows help."""
-    monkeypatch.setattr(sys, "argv", ["wishful"])
-    with pytest.raises(SystemExit) as exc_info:
-        cli.main()
-    assert exc_info.value.code == 0
-    captured = capsys.readouterr()
-    assert "Usage:" in captured.out
-    assert "inspect" in captured.out
-    assert "clear" in captured.out
-    assert "regen" in captured.out
+def test_cli_no_args_prints_help_returns_zero(capsys):
+    code = cli.main([])
+    assert code == 0
+    out = capsys.readouterr().out
+    assert "usage: wishful" in out
+    for cmd in ("inspect", "clear", "regen"):
+        assert cmd in out
 
 
-def test_cli_inspect_empty(monkeypatch, capsys):
-    """Test inspect command with no cached modules."""
+def test_cli_version():
+    code = cli.main(["--version"])
+    assert code == 0
+
+
+def test_cli_version_matches_metadata(capsys):
+    cli.main(["--version"])
+    printed = capsys.readouterr().out.strip()
+    assert printed == importlib.metadata.version("wishful")
+    assert printed == wishful.__version__
+
+
+def test_cli_inspect_empty(capsys):
     manager.clear_cache()
-    monkeypatch.setattr(sys, "argv", ["wishful", "inspect"])
-    cli.main()
-    captured = capsys.readouterr()
-    assert "No cached modules" in captured.out
+    assert cli.main(["inspect"]) == 0
+    assert "No cached modules" in capsys.readouterr().out
 
 
-def test_cli_inspect_with_cache(monkeypatch, capsys, tmp_path):
-    """Test inspect command with cached modules."""
+def test_cli_inspect_json(capsys, tmp_path):
     configure(cache_dir=tmp_path / ".wishful")
-    manager.write_cached("wishful.test", "# test")
-    
-    monkeypatch.setattr(sys, "argv", ["wishful", "inspect"])
-    cli.main()
-    captured = capsys.readouterr()
-    assert "Cached modules" in captured.out
-    assert "test.py" in captured.out
-    
+    manager.write_cached("wishful.static.text", "# test")
+    assert cli.main(["inspect", "--json"]) == 0
+    payload = json.loads(capsys.readouterr().out)
+    assert "cached" in payload and "cache_dir" in payload
+    assert any("text.py" in p for p in payload["cached"])
     manager.clear_cache()
 
 
-def test_cli_clear(monkeypatch, capsys, tmp_path):
-    """Test clear command."""
+def test_cli_clear_json(capsys, tmp_path):
     configure(cache_dir=tmp_path / ".wishful")
-    manager.write_cached("wishful.test", "# test")
-    
-    monkeypatch.setattr(sys, "argv", ["wishful", "clear"])
-    cli.main()
-    captured = capsys.readouterr()
-    assert "Cleared all cached modules" in captured.out
+    manager.write_cached("wishful.static.text", "# test")
+    assert cli.main(["clear", "--json"]) == 0
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["cleared"] is True
     assert not manager.inspect_cache()
 
 
-def test_cli_regen(monkeypatch, capsys, tmp_path):
-    """Test regen command."""
+def test_cli_regen_json(capsys, tmp_path):
     configure(cache_dir=tmp_path / ".wishful")
-    manager.write_cached("wishful.test", "# test")
-    
-    monkeypatch.setattr(sys, "argv", ["wishful", "regen", "wishful.test"])
-    cli.main()
-    captured = capsys.readouterr()
-    assert "Regenerated wishful.test" in captured.out
-    assert not manager.has_cached("wishful.test")
+    manager.write_cached("wishful.static.text", "# test")
+    assert cli.main(["regen", "wishful.static.text", "--json"]) == 0
+    payload = json.loads(capsys.readouterr().out)
+    assert payload == {"module": "wishful.static.text", "regenerated": True}
+    assert not manager.has_cached("wishful.static.text")
 
 
-def test_cli_regen_no_module(monkeypatch, capsys):
-    """Test regen command without module name."""
-    monkeypatch.setattr(sys, "argv", ["wishful", "regen"])
-    with pytest.raises(SystemExit) as exc_info:
-        cli.main()
-    assert exc_info.value.code == 1
-    captured = capsys.readouterr()
-    assert "requires a module name" in captured.out
+def test_cli_regen_rejects_traversal_module_name(capsys):
+    code = cli.main(["regen", "../../etc/passwd", "--json"])
+    assert code == 1
+    payload = json.loads(capsys.readouterr().out)
+    assert "error" in payload
 
 
-def test_cli_unknown_command(monkeypatch, capsys):
-    """Test unknown command."""
-    monkeypatch.setattr(sys, "argv", ["wishful", "unknown"])
-    with pytest.raises(SystemExit) as exc_info:
-        cli.main()
-    assert exc_info.value.code == 1
-    captured = capsys.readouterr()
-    assert "Unknown command" in captured.out
+def test_cli_regen_missing_module_is_usage_error():
+    with pytest.raises(SystemExit) as exc:
+        cli.main(["regen"])
+    assert exc.value.code == 2
+
+
+def test_cli_unknown_command_is_usage_error():
+    with pytest.raises(SystemExit) as exc:
+        cli.main(["bogus"])
+    assert exc.value.code == 2
