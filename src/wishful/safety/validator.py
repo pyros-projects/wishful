@@ -18,13 +18,23 @@ _FORBIDDEN_IMPORTS = {
     "os", "subprocess", "sys", "importlib", "builtins", "ctypes",
     "runpy", "pickle", "marshal", "shutil", "code", "codeop",
     "socket", "multiprocessing", "pty", "fcntl",
+    # The C-level aliases of the above: importing them by their real names
+    # (``import posix`` -> posix.system/execv/fork, ``import nt`` on Windows,
+    # ``_posixsubprocess.fork_exec``) bypasses the os/subprocess names entirely.
+    "posix", "nt", "_posixsubprocess",
 }
 
 # Attribute-call method names that write files or execute code, blocked
 # regardless of the base object (e.g. pathlib.Path(p).write_text, runpy.run_path).
+# NOTE: ``system``/``popen``/``spawn`` are deliberately NOT here. Their only
+# dangerous form is ``os.system``/``os.popen``/``os.spawn*``, which already needs
+# ``import os`` (blocked) or an unbound ``os`` base (blocked below); a blanket
+# ``.system()`` block instead rejected the legitimate ``platform.system()`` and
+# anything else that happens to share the method name. Aliasing os to a local and
+# calling ``.system()`` on it is the accepted computed-access residual, not a form
+# this set could catch anyway.
 _FORBIDDEN_METHODS = {
     "write_text", "write_bytes", "run_path", "run_module", "exec_module",
-    "system", "popen", "spawn",
 }
 
 # Bare-name calls that are never allowed (direct or via the __import__ gadget).
@@ -43,9 +53,6 @@ _DANGEROUS_BUILTINS = {
 # Attribute-call bases that, when *unbound* (not a local variable), can only
 # resolve through injected globals — block those.
 _UNBOUND_ATTR_BASES = {"os", "subprocess", "sys", "importlib", "ctypes", "builtins"}
-
-# String literals that must not be fed to getattr() as an attribute name.
-_FORBIDDEN_ATTR_STRINGS = {"eval", "exec", "compile", "__import__", "__builtins__", "system", "popen"}
 
 # Dunder attributes that are the building blocks of the classic introspection
 # sandbox escape (``().__class__.__bases__[0].__subclasses__()[N].__init__.__globals__``).
@@ -69,7 +76,10 @@ _FORBIDDEN_SUBSCRIPT_KEYS = {
 
 # Literal attribute names that getattr/setattr/delattr/hasattr must not resolve —
 # the escape primitives plus the dangerous builtins reachable through them.
-_FORBIDDEN_GETATTR_NAMES = _ESCAPE_ATTRS | _DANGEROUS_BUILTINS | {"system", "popen"}
+# ``system``/``popen`` are intentionally excluded for the same reason as
+# _FORBIDDEN_METHODS: their dangerous target (os) is already import/unbound-gated,
+# and listing them only false-positives on ``getattr(platform, 'system')``.
+_FORBIDDEN_GETATTR_NAMES = _ESCAPE_ATTRS | _DANGEROUS_BUILTINS
 
 _WRITE_MODES = {"w", "a", "+", "x"}
 

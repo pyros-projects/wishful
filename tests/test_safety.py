@@ -12,6 +12,10 @@ BLOCKED = [
     "import builtins",
     "import ctypes",
     "import os",
+    "import posix",                # the C-level os alias (posix.system/execv/fork)
+    "from posix import system",    # ... and importing its members directly
+    "import nt",                   # the Windows C-level os alias
+    "import _posixsubprocess",     # subprocess's C helper (fork_exec)
     "from subprocess import run",
     "getattr(__builtins__, 'eval')('1')",
     "__builtins__['eval']('1')",
@@ -63,6 +67,8 @@ ALLOWED = [
     "open('f', 'r')",
     "open('f')",
     "getattr(obj, 'name')",
+    "import platform\nname = platform.system()",   # platform.system() is not os.system
+    "import platform\nif platform.system() == 'Linux':\n    pass",
     "x = 'linux'\nos = x\nif os.lower() == 'linux':\n    pass",
     "def f(x):\n    return x * 2",
     "import json\nimport re\nfrom datetime import datetime\nimport math",
