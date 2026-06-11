@@ -2,13 +2,16 @@
 
 from __future__ import annotations
 
+import ast
 import asyncio
 import atexit
+import os
+import sys
 import time
 import warnings
 from typing import Callable, List, Literal, Optional, Tuple, Union
 
-from wishful.cache.manager import write_cached
+from wishful.cache.manager import read_cached, write_cached
 from wishful.config import settings
 from wishful.explore.exceptions import ExplorationError
 from wishful.explore.progress import (
@@ -85,6 +88,37 @@ def _run_async(coro):
         return loop.run_until_complete(coro)
 
 
+def _merge_into_module(existing, function_name: str, winner_source: str) -> str:
+    """Merge a winning variant into an existing cached module.
+
+    Replaces only the explored function and preserves any other symbols already
+    cached in the module — exploring one function must not wipe its siblings. If
+    there is no existing module (or it cannot be parsed), the winner is used as-is.
+    """
+    if not existing or not existing.strip():
+        return winner_source
+    try:
+        tree = ast.parse(existing)
+    except SyntaxError:
+        return winner_source
+    kept = [
+        node
+        for node in tree.body
+        if not (
+            isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef))
+            and node.name == function_name
+        )
+    ]
+    if len(kept) == len(tree.body):
+        prefix = existing.rstrip()  # function wasn't here before; keep verbatim
+    else:
+        tree.body = kept
+        prefix = ast.unparse(tree).rstrip()
+    if not prefix.strip():
+        return winner_source
+    return prefix + "\n\n\n" + winner_source.lstrip()
+
+
 def explore(
     module_path: str,
     *,
@@ -94,8 +128,8 @@ def explore(
     optimize: Literal["first_passing", "fastest", "best_score"] = "first_passing",
     timeout_per_variant: float = 30.0,
     return_all: bool = False,
-    verbose: bool = True,
-    save_results: bool = True,
+    verbose: Optional[bool] = None,
+    save_results: Optional[bool] = None,
 ) -> Union[Callable, List[Callable]]:
     """
     Generate multiple variants of a function and select the best one.
@@ -111,8 +145,10 @@ def explore(
             - "best_score": Alias for "fastest"
         timeout_per_variant: Max seconds to spend generating each variant
         return_all: If True, return list of all valid variants instead of just best
-        verbose: If True, show live progress display (default: True)
-        save_results: If True, save results to CSV in cache_dir/_explore/ (default: True)
+        verbose: Show live progress display. Defaults to whether stdout is a TTY,
+            so headless/CI runs stay quiet unless explicitly set.
+        save_results: Save results to CSV in cache_dir/_explore/. Defaults to the
+            WISHFUL_EXPLORE_SAVE_RESULTS env var (on unless set to "0").
 
     Returns:
         The best function, or list of functions if return_all=True
@@ -121,6 +157,10 @@ def explore(
         wishful.ExplorationError: If no variant passes the test
         ValueError: If module_path is invalid
     """
+    if verbose is None:
+        verbose = sys.stdout.isatty()
+    if save_results is None:
+        save_results = os.getenv("WISHFUL_EXPLORE_SAVE_RESULTS", "1") != "0"
     # Run the async implementation with reusable event loop
     return _run_async(
         _explore_async(
@@ -230,7 +270,11 @@ async def _explore_async(
     # was generated, but safety could have been toggled since.
     if hasattr(winner, "__wishful_source__"):
         validate_code(winner.__wishful_source__, allow_unsafe=settings.allow_unsafe)
-        write_cached(module_name, winner.__wishful_source__)
+        merged = _merge_into_module(
+            read_cached(module_name), function_name, winner.__wishful_source__
+        )
+        validate_code(merged, allow_unsafe=settings.allow_unsafe)
+        write_cached(module_name, merged)
 
     return winner
 

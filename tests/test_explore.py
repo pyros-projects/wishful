@@ -17,6 +17,54 @@ def make_async_fake(sync_fn):
     return async_wrapper
 
 
+class TestWinnerMerge:
+    """Caching a winner must not clobber other symbols in the module."""
+
+    def test_explore_preserves_sibling_symbols(self, monkeypatch, tmp_path):
+        import wishful
+        from wishful.cache import manager
+
+        wishful.configure(cache_dir=tmp_path / ".wishful")
+        # A sibling function already lives in the target module.
+        manager.write_cached(
+            "wishful.static.text",
+            "def keep_me():\n    return 'kept'\n\n\ndef extract(s):\n    return 'old'\n",
+        )
+
+        def fake_generate(module, functions, context, **kwargs):
+            return "def extract(s):\n    return 'new'\n"
+
+        monkeypatch.setattr(
+            explorer_module, "agenerate_module_code", make_async_fake(fake_generate)
+        )
+
+        explore(
+            "wishful.static.text.extract",
+            variants=1,
+            test=lambda fn: fn("x") == "new",
+            verbose=False,
+            save_results=False,
+        )
+
+        merged = manager.read_cached("wishful.static.text")
+        ns: dict = {}
+        exec(merged, ns)
+        assert ns["keep_me"]() == "kept"      # sibling survived
+        assert ns["extract"]("x") == "new"    # target replaced
+        manager.clear_cache()
+
+    def test_merge_into_module_helper(self):
+        from wishful.explore.explorer import _merge_into_module
+
+        assert _merge_into_module(None, "f", "def f():\n    return 1\n").startswith("def f")
+        merged = _merge_into_module(
+            "def a():\n    return 1\n\n\ndef b():\n    return 2\n", "b", "def b():\n    return 3\n"
+        )
+        ns: dict = {}
+        exec(merged, ns)
+        assert ns["a"]() == 1 and ns["b"]() == 3
+
+
 class TestExploreBasic:
     """Basic explore functionality."""
 
