@@ -32,24 +32,30 @@ All notable changes to wishful will be documented here. Follows [Keep a Changelo
 ### Changed
 
 #### 🛡️ Security / Validator
-- Hardened safety validator, framed honestly as **"defense in depth, not a sandbox"**: AST scan blocks forbidden imports/calls, `__builtins__`/`globals()`/`vars()` gadget access, write-mode `open()`, and system calls through aliases. The same scan re-runs on cache load, so tampered `.wishful/` files are re-checked.
+- Hardened safety validator, framed honestly as **"defense in depth, not a sandbox"**: AST scan blocks forbidden imports/calls, `__builtins__`/`globals()`/`vars()`/`locals()` gadget access, introspection escape chains (`__subclasses__`/`__globals__`/`__code__`/`__bases__`), aliased dangerous builtins (`f = open`), write-mode (or non-literal-mode) `open()`, and system calls on unbound modules. The same scan re-runs on cache load, so tampered `.wishful/` files are re-checked. Only genuinely *computed* access (runtime-built attribute names, `globals().get(...)`) remains a documented residual.
 
 #### 🗄️ Cache
-- **Cache integrity + namespacing**: `static` and `dynamic` prefixes map to the same cache file; cached sources are re-validated on load.
+- **Namespace isolation**: `static` and `dynamic` modules now map to **separate** cache files (`<cache>/<name>.py` vs `<cache>/_dynamic/<name>.py`) — they previously collided, so a regenerate or review-rejection on one namespace could clobber the other. Cached sources are re-validated on load, and writes are atomic (temp file + rename).
 
 #### 🔍 Review gate
-- **Review-gate ordering + headless guard**: review happens before execution, with a guard for non-interactive environments.
+- **Review-gate ordering + headless guard**: review happens before execution on every path, with a guard for non-interactive environments (fails closed, stays usable in notebooks).
 
 #### 🎨 Type Registry
-- Type-registry fixes for serialization and output-type binding.
+- Type-registry fixes for serialization and output-type binding (parameterized generics like `list[str]` are preserved; `default_factory` fields serialize correctly).
 
 #### 📦 Versioning
 - **`__version__` now derives from installed package metadata** (`importlib.metadata.version`) instead of being hardcoded.
 
+### Breaking changes
+- **`max_tokens` default raised `4096` → `16384`**: reasoning models (e.g. gpt-5.5) spend part of the budget on hidden reasoning tokens, so the old cap produced empty or truncated output.
+- **`evolve(verbose=...)` removed**: the parameter was accepted but never used; passing it now raises `TypeError`.
+- **`log_to_file` defaults to `False`** (was `True`).
+- **`WISHFUL_MODEL` takes precedence over `DEFAULT_MODEL`** (was the reverse).
+
 ### Dependencies
-- Refreshed: `litellm`, `rich`, `python-dotenv`, `pydantic`.
+- Refreshed: `litellm` (≥1.83.14, for day-0 gpt-5.5 support), `rich`, `python-dotenv`, `pydantic`.
 - Added `loguru` and `nest-asyncio`.
-- Removed `pyglove`.
+- Removed `pyglove` (was unused).
 
 ---
 
