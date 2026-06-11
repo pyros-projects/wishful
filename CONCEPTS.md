@@ -18,4 +18,4 @@ A class of bypass the Validator provably cannot detect — aliased or computed a
 ## Wishes
 
 ### Nested wish
-A wish name with more than one component below the namespace (`wishful.static.a.b`). Never supported — generated parents are not packages — and since 0.3.1 rejected at discovery time with an `ImportError` naming the rule ("wish names are single-level") *before* any LLM call is spent. The supported shape is `wishful.static.<module>` / `wishful.dynamic.<module>` with symbols inside the module.
+A wish name with more than one component below the namespace (`wishful.static.a.b`). Never supported — generated parents are not packages — and since 0.4.0 rejected at discovery time with an `ImportError` naming the rule ("wish names are single-level") *before* any LLM call is spent. The supported shape is `wishful.static.<module>` / `wishful.dynamic.<module>` with symbols inside the module.

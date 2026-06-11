@@ -46,7 +46,7 @@ uv sync
 
 This reads `pyproject.toml` and `uv.lock`, creates a virtual env, and installs:
 
-- Runtime deps: `litellm`, `rich`, `python-dotenv`, `pydantic`, `loguru` (nest-asyncio was removed in 0.3.1: explore owns a persistent background event loop on a daemon thread instead of patching the host loop)
+- Runtime deps: `litellm`, `rich`, `python-dotenv`, `pydantic`, `loguru` (nest-asyncio was removed in 0.4.0: explore owns a persistent background event loop on a daemon thread instead of patching the host loop)
 - Dev deps: `pytest`, `pytest-cov`, `coverage`, `mypy`, `ruff`, `bandit`, `radon`
 
 ### Running commands (always via `uv run`)
@@ -199,7 +199,7 @@ From the root:
 - `pyproject.toml`  
   - Project metadata: name, version, description.
   - `requires-python = ">=3.12"`.
-- Runtime deps: `litellm`, `rich`, `python-dotenv`, `pydantic`, `loguru` (nest-asyncio was removed in 0.3.1: explore owns a persistent background event loop on a daemon thread instead of patching the host loop)
+- Runtime deps: `litellm`, `rich`, `python-dotenv`, `pydantic`, `loguru` (nest-asyncio was removed in 0.4.0: explore owns a persistent background event loop on a daemon thread instead of patching the host loop)
 - Dev deps under `[dependency-groups].dev`: `pytest`, `pytest-cov`, `coverage`, `mypy`, `ruff`, `bandit`, `radon`
   - Build system uses `uv_build` as backend.
   - Declares a `wishful` console script via `[project.scripts]` (`wishful = "wishful.__main__:main"`).
@@ -372,7 +372,7 @@ Configuration is centralized in `src/wishful/config.py` via the `Settings` datac
 - `log_level: str` – logging level, uppercased (default `"WARNING"`, from `WISHFUL_LOG_LEVEL`).
 - `log_to_file: bool` – write logs to `{cache_dir}/_logs/`. **Default `False` (opt-in)** via `WISHFUL_LOG_TO_FILE=1`; a bare `import wishful` creates no files.
 - `request_timeout: float` – per-request LLM timeout in seconds (default 300, from `WISHFUL_REQUEST_TIMEOUT`).
-- `context_radius` (env `WISHFUL_CONTEXT_RADIUS`, default `3`): lines of surrounding code captured per direction at the import site. A regular `Settings` field since 0.3.1 — `configure(context_radius=...)` and `reset_defaults()` aware; `wishful.set_context_radius(n)` is a thin wrapper.
+- `context_radius` (env `WISHFUL_CONTEXT_RADIUS`, default `3`): lines of surrounding code captured per direction at the import site. A regular `Settings` field since 0.4.0 — `configure(context_radius=...)` and `reset_defaults()` aware; `wishful.set_context_radius(n)` is a thin wrapper.
 
 Use `wishful.configure(...)` at runtime to change these values programmatically:
 
