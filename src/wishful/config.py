@@ -148,7 +148,8 @@ def configure(
 
     updates = {
         "model": model,
-        "cache_dir": Path(cache_dir) if cache_dir is not None else None,
+        # Pin to an absolute path so a later os.chdir() can't move the cache.
+        "cache_dir": Path(cache_dir).resolve() if cache_dir is not None else None,
         "review": review,
         "debug": debug,
         "allow_unsafe": allow_unsafe,
