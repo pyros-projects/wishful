@@ -1069,3 +1069,30 @@ class TestSharedCompilePath:
         f.__wishful_source__ = "def f(x):\n    return x"
         evolve(f, fitness=lambda fn: float(fn(1)), generations=1, variants=1)
         assert "f" in calls
+
+
+class TestEvolveArgValidation:
+    """evolve() rejects nonsensical arguments upfront (#62)."""
+
+    @staticmethod
+    def _fn():
+        def f(x):
+            return x
+
+        f.__wishful_source__ = "def f(x):\n    return x"
+        return f
+
+    @pytest.mark.parametrize(
+        "kwargs",
+        [
+            {"generations": -1},
+            {"variants": 0},
+            {"history_limit": -1},
+            {"timeout_per_variant": 0},
+        ],
+    )
+    def test_invalid_args_raise(self, kwargs):
+        from wishful.evolve import evolve
+
+        with pytest.raises(ValueError):
+            evolve(self._fn(), fitness=lambda fn: 1.0, **kwargs)

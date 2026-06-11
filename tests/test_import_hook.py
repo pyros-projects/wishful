@@ -695,3 +695,42 @@ def test_injectable_generate_fn(tmp_path):
 
     assert module.hello() == "injected"
     assert calls and calls[0][0] == "wishful.static.injected_demo"
+
+
+def test_install_finder_is_idempotent():
+    """install() never stacks duplicate MagicFinders on sys.meta_path (#62)."""
+    import sys
+
+    from wishful.core import finder as finder_module
+
+    def count_finders() -> int:
+        return sum(
+            1
+            for f in sys.meta_path
+            if f.__class__.__name__ == "MagicFinder"
+            and f.__class__.__module__.endswith("wishful.core.finder")
+        )
+
+    before = count_finders()
+    assert before >= 1  # installed by `import wishful`
+    finder_module.install()
+    finder_module.install()
+    assert count_finders() == before
+
+
+def test_fresh_generation_lacking_symbols_raises(monkeypatch):
+    """_ensure_symbols on a non-cache generation fails loudly, naming the gap (#62)."""
+    import pytest
+
+    from wishful.core import loader as loader_module
+
+    def bad_generate(module, functions, context, **kwargs):
+        return "def something_else():\n    return 0\n"  # ignores the request
+
+    monkeypatch.setattr(loader_module, "generate_module_code", bad_generate)
+
+    # Match on the builtin ImportError base: module churn in earlier tests can
+    # leave the loader raising an older GenerationError class object than a
+    # fresh `from wishful.llm.client import GenerationError` would yield.
+    with pytest.raises(ImportError, match="lacks symbols.*wanted_fn"):
+        from wishful.static.lacking import wanted_fn  # noqa: F401

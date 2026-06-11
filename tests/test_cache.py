@@ -97,3 +97,37 @@ def test_delete_dynamic_does_not_touch_static(tmp_path):
     # static survives; only the dynamic snapshot is gone
     assert manager.read_cached("wishful.static.shared") == "def s():\n    return 'static'\n"
     assert not manager.dynamic_snapshot_path("wishful.dynamic.shared").exists()
+
+
+class TestCacheHelpers:
+    """The small manager helpers, pinned (#62)."""
+
+    def test_has_cached_lifecycle(self):
+        from wishful.cache import manager
+
+        name = "wishful.static.helper_demo"
+        assert manager.has_cached(name) is False
+        manager.write_cached(name, "def f():\n    return 1\n")
+        assert manager.has_cached(name) is True
+        manager.delete_cached(name)
+        assert manager.has_cached(name) is False
+
+    def test_delete_cached_missing_is_noop(self):
+        from wishful.cache import manager
+
+        manager.delete_cached("wishful.static.never_existed")  # must not raise
+
+    def test_snapshot_path_is_disjoint_from_static(self):
+        from wishful.cache import manager
+
+        static = manager.module_path("wishful.static.same_name")
+        dynamic = manager.dynamic_snapshot_path("wishful.dynamic.same_name")
+        assert static != dynamic
+        assert "_dynamic" in str(dynamic)
+
+    def test_inspect_cache_lists_written_modules(self):
+        from wishful.cache import manager
+
+        manager.write_cached("wishful.static.listme", "def f():\n    return 1\n")
+        listed = [str(p) for p in manager.inspect_cache()]
+        assert any("listme" in p for p in listed)

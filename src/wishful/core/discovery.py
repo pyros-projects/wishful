@@ -86,6 +86,24 @@ def _alias_targets(aliases: Sequence[ast.alias], fullname: str) -> list[str]:
     ]
 
 
+def _nested_request(tree: ast.AST, fullname: str) -> str | None:
+    """Return the deeper module name when the call site imports below ``fullname``.
+
+    ``import wishful.static.a.b`` (or ``from wishful.static.a.b import c``)
+    while loading ``wishful.static.a`` is a nested wish — unsupported.
+    """
+    prefix = fullname + "."
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            for alias in node.names:
+                if alias.name.startswith(prefix):
+                    return alias.name
+        elif isinstance(node, ast.ImportFrom):
+            if node.module and node.module.startswith(prefix):
+                return node.module
+    return None
+
+
 def _is_plain_import(fullname: str, tree: ast.AST) -> bool:
     """Return True when the line is an ast.Import of the fullname (not ImportFrom)."""
     for node in ast.walk(tree):
@@ -122,11 +140,25 @@ def discover(fullname: str, runtime_context: dict | None = None) -> ImportContex
         if not code_line:
             continue
 
+        tree = _safe_parse_line(code_line)
+        if tree is not None:
+            # Nested wishes have never worked (generated parents are not
+            # packages); fail BEFORE the parent burns an LLM call, with an
+            # error that names the problem instead of "X is not a package".
+            nested = _nested_request(tree, fullname)
+            if nested is not None:
+                flat = nested.rsplit(".", 1)[-1]
+                namespace = ".".join(fullname.split(".")[:2])
+                raise ImportError(
+                    f"nested wishful module {nested!r} is not supported: wish "
+                    f"names are single-level. Flatten it, e.g. "
+                    f"'{namespace}.{flat}'. No code was generated."
+                )
+
         functions = _parse_imported_names(code_line, fullname)
         if not functions:
             continue
 
-        tree = _safe_parse_line(code_line)
         if tree and _is_plain_import(fullname, tree):
             functions = []
 

@@ -328,3 +328,28 @@ def test_cache_subpackage_not_shadowed_by_alias():
     )
     r = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True)
     assert r.returncode == 0, r.stderr
+
+
+def test_nested_wish_rejected_before_generation(monkeypatch):
+    """import wishful.static.a.b fails clearly with ZERO LLM calls (plan R17)."""
+    calls = {"n": 0}
+
+    def fake_generate(module, functions, context, **kwargs):
+        calls["n"] += 1
+        return "def x():\n    return 1\n"
+
+    monkeypatch.setattr(loader, "generate_module_code", fake_generate)
+    manager.clear_cache()
+    _reset_modules()
+
+    import pytest
+
+    with pytest.raises(ImportError, match="nested wishful module"):
+        import wishful.static.alpha.beta  # noqa: F401
+
+    assert calls["n"] == 0  # the parent never generated
+
+    with pytest.raises(ImportError, match="nested wishful module"):
+        from wishful.dynamic.gamma.delta import thing  # noqa: F401
+
+    assert calls["n"] == 0

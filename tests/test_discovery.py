@@ -231,3 +231,17 @@ def test_discover_works_without_registered_types(monkeypatch):
     assert ctx.function_output_types == {}
     assert ctx.functions == ["some_function"]
 
+
+
+def test_is_user_frame_normalizes_windows_paths():
+    """Backslash paths classify identically to POSIX ones (#62)."""
+    from wishful.core.discovery import _is_user_frame
+
+    # wishful's own source is not a user frame, regardless of separator
+    assert _is_user_frame("C:\\proj\\src\\wishful\\core\\loader.py") is False
+    assert _is_user_frame("/proj/src/wishful/core/loader.py") is False
+    # user code is, on both platforms
+    assert _is_user_frame("C:\\app\\main.py") is True
+    assert _is_user_frame("/app/main.py") is True
+    # tests under a wishful checkout still count as user frames
+    assert _is_user_frame("C:\\proj\\src\\wishful\\tests\\test_x.py") is True

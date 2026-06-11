@@ -479,3 +479,51 @@ class TestSerializationEdgeCases:
         schema = registry.get_schema("SimpleDict")
         assert "key: str" in schema
         assert "value: int" in schema
+
+
+class TestRegistryDiscrimination:
+    """Type-kind discrimination edge cases (#62)."""
+
+    def test_typed_dict_not_serialized_as_dataclass(self):
+        from typing import TypedDict
+
+        from wishful.types.registry import TypeRegistry
+
+        class Movie(TypedDict):
+            title: str
+            year: int
+
+        registry = TypeRegistry()
+        registry.register(Movie)
+        schema = registry.get_schema("Movie")
+        assert "class Movie(TypedDict):" in schema
+        assert "@dataclass" not in schema
+
+    def test_pydantic_v1_style_class_does_not_crash(self):
+        """A v1-style model (no model_fields) degrades to a usable fallback."""
+        from wishful.types.registry import TypeRegistry
+
+        class V1Model:
+            """Quacks like pydantic v1: __fields__ but no model_fields."""
+
+            __fields__ = {"name": None}
+
+            def __init__(self, name: str = ""):
+                self.name = name
+
+        registry = TypeRegistry()
+        registry.register(V1Model)  # must not raise
+        schema = registry.get_schema("V1Model")
+        assert "V1Model" in schema
+
+    def test_plain_annotated_class_serializes(self):
+        from wishful.types.registry import TypeRegistry
+
+        class Config:
+            host: str
+            port: int
+
+        registry = TypeRegistry()
+        registry.register(Config)
+        schema = registry.get_schema("Config")
+        assert "Config" in schema
