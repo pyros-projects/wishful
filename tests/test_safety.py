@@ -33,6 +33,15 @@ BLOCKED = [
     "g = getattr\nr = g(o, 'system')",   # aliased getattr (gadget)
     "def h(x=open):\n    return x('f', 'w')",  # open as default arg
     "k = eval",                  # aliased eval
+    # Introspection sandbox-escape gadget chains:
+    "x = [].__class__.__bases__[0].__subclasses__()",
+    "g = (lambda: 0).__globals__",
+    "c = (lambda: 0).__code__",
+    "b = ().__class__.__bases__",
+    "e = type('A',(),{}).__bases__[0].__subclasses__()[0].__init__.__globals__['__builtins__']['eval']",
+    "g = {'__builtins__': 1}\ne = g['__builtins__']['eval']",
+    "x = obj.__getattribute__('eval')",
+    "m = something.__mro__",
 ]
 
 # Legitimate code that must keep passing — including a shadowed `os` local,
@@ -47,6 +56,7 @@ ALLOWED = [
     "import re\np = re.compile(r'\\d+')",
     "data = {'a': 1}\nv = data['a']",
     "result = sorted([3, 1, 2])",
+    "name = obj.__class__.__name__",   # common introspection stays allowed
     # Every binding form that introduces a local `os`/`sys`/`subprocess` must
     # suppress the unbound-base check (no false positives):
     "os, sys = 'x', 'y'\nif os.lower() == sys.upper():\n    pass",   # tuple unpack

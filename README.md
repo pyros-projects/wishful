@@ -412,9 +412,9 @@ All settings can also be configured via environment variables:
 
 ## 🛡️ Safety Rails: Defense in Depth, Not a Sandbox
 
-Before generated code runs, it's AST-scanned and the obvious dangerous patterns are blocked: forbidden imports (`os`, `subprocess`, `sys`, `importlib`, `builtins`, `ctypes`), `eval`/`exec`/`compile`/`__import__`, `__builtins__` gadget access, write-mode (or non-literal-mode) `open()`, and system calls on those modules. The same scan runs again when a cached file is loaded, so a tampered `.wishful/` file is re-checked, not trusted.
+Before generated code runs, it's AST-scanned and the obvious dangerous patterns are blocked: forbidden imports (`os`, `subprocess`, `sys`, `importlib`, `builtins`, `ctypes`), `eval`/`exec`/`compile`/`__import__`, `__builtins__`/`globals()`/`vars()`/`locals()` gadget access, introspection escape chains (`__subclasses__`, `__globals__`, `__code__`, `__bases__`, …), aliased dangerous builtins (`f = open`), write-mode (or non-literal-mode) `open()`, and system calls on those modules. The same scan runs again when a cached file is loaded, so a tampered `.wishful/` file is re-checked, not trusted.
 
-**Be honest about what this is.** Generated code executes **in your process**. A static AST scan stops a careless generation, not a determined one — aliased or computed access (`g = getattr; g(obj, "system")`) can slip through, and only an out-of-process sandbox would make running model-written code truly safe. Treat the validator as a seatbelt, not a vault. For untrusted inputs, review the cached code (it's plain Python) or run wishful where arbitrary code execution is acceptable.
+**Be honest about what this is.** Generated code executes **in your process**. A static AST scan stops a careless generation, not a determined one — *computed* access (`getattr(obj, "sys" + "tem")`, `globals().get("__builtins__")`) can still slip through, and only an out-of-process sandbox would make running model-written code truly safe. Treat the validator as a seatbelt, not a vault. For untrusted inputs, review the cached code (it's plain Python) or run wishful where arbitrary code execution is acceptable.
 
 **Override at your own peril**: `WISHFUL_UNSAFE=1` or `allow_unsafe=True` turns the scan off entirely.
 

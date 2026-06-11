@@ -35,6 +35,21 @@ _UNBOUND_ATTR_BASES = {"os", "subprocess", "sys", "importlib", "ctypes", "builti
 # String literals that must not be fed to getattr() as an attribute name.
 _FORBIDDEN_ATTR_STRINGS = {"eval", "exec", "compile", "__import__", "__builtins__", "system", "popen"}
 
+# Dunder attributes that are the building blocks of the classic introspection
+# sandbox escape (``().__class__.__bases__[0].__subclasses__()[N].__init__.__globals__``).
+# Generated utility code never needs these; blocking them breaks the gadget chain.
+_ESCAPE_ATTRS = {
+    "__subclasses__", "__bases__", "__base__", "__mro__", "__subclasshook__",
+    "__globals__", "__code__", "__closure__", "__builtins__", "__getattribute__",
+}
+
+# String keys that must not appear as a subscript, regardless of the base object,
+# to block ns['__builtins__']['eval'] style gadget chains.
+_FORBIDDEN_SUBSCRIPT_KEYS = {
+    "__builtins__", "__globals__", "__code__",
+    "eval", "exec", "compile", "__import__", "system", "popen",
+}
+
 _WRITE_MODES = {"w", "a", "+", "x"}
 
 
@@ -178,7 +193,8 @@ def _attribute_base(attr: ast.Attribute) -> str | None:
 
 
 def _check_subscripts(tree: ast.AST) -> None:
-    """Block __builtins__[...] and globals()/vars()[...] gadget access."""
+    """Block __builtins__[...], globals()/vars()/locals()[...], and forbidden-key
+    subscripts (e.g. ns['__builtins__']['eval']) regardless of the base object."""
     for node in ast.walk(tree):
         if not isinstance(node, ast.Subscript):
             continue
@@ -188,6 +204,18 @@ def _check_subscripts(tree: ast.AST) -> None:
         if isinstance(value, ast.Call) and isinstance(value.func, ast.Name):
             if value.func.id in {"globals", "vars", "locals"}:
                 raise SecurityError(f"Subscripting {value.func.id}() is blocked")
+        key = node.slice
+        if isinstance(key, ast.Constant) and isinstance(key.value, str):
+            if key.value in _FORBIDDEN_SUBSCRIPT_KEYS:
+                raise SecurityError(f"Subscript with forbidden key: {key.value!r}")
+
+
+def _check_escape_attrs(tree: ast.AST) -> None:
+    """Block introspection-escape dunder attribute access (the __subclasses__/
+    __globals__/__code__ gadget chain)."""
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Attribute) and node.attr in _ESCAPE_ATTRS:
+            raise SecurityError(f"Access to {node.attr} is blocked")
 
 
 def _validate_open_call(call: ast.Call) -> None:
@@ -247,4 +275,5 @@ def validate_code(source: str, *, allow_unsafe: bool = False) -> None:
     _check_imports(tree)
     _check_calls(tree, bound_names)
     _check_subscripts(tree)
+    _check_escape_attrs(tree)
     _check_bare_dangerous_refs(tree)
