@@ -353,3 +353,37 @@ def test_nested_wish_rejected_before_generation(monkeypatch):
         from wishful.dynamic.gamma.delta import thing  # noqa: F401
 
     assert calls["n"] == 0
+
+
+def test_dynamic_call_exec_failure_restores_module_and_snapshot(monkeypatch):
+    """Commit guard holds even when the symbol exists but exec raises (review P2)."""
+    calls = {"n": 0}
+
+    def fake_generate(module, functions, context, **kwargs):
+        calls["n"] += 1
+        if calls["n"] == 1:
+            return "def stable():\n    return 'v1'\n"
+        # Defines the called symbol (the AST guard passes) but raises at exec.
+        return "import definitely_not_installed_xyz\n\ndef boom():\n    return 1\n"
+
+    monkeypatch.setattr(loader, "generate_module_code", fake_generate)
+    manager.clear_cache()
+    _reset_modules()
+
+    import wishful.dynamic.gutless as mod
+
+    assert "stable" in mod.__dict__
+    snapshot_before = manager.dynamic_snapshot_path("wishful.dynamic.gutless").read_text()
+
+    import pytest
+
+    with pytest.raises(ModuleNotFoundError):
+        mod.boom()
+
+    # Namespace and snapshot rolled back — the module is not gutted. (Read the
+    # namespace directly: going through `mod.stable()` would regenerate, per the
+    # dynamic call contract.)
+    assert "stable" in mod.__dict__
+    assert mod.__dict__["stable"]() == "v1"
+    snapshot_after = manager.dynamic_snapshot_path("wishful.dynamic.gutless").read_text()
+    assert snapshot_after == snapshot_before

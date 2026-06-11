@@ -80,6 +80,9 @@ def example_allow_unsafe() -> None:
     finally:
         wishful.configure(allow_unsafe=False)
         wishful.clear_cache()
+        # Re-enabling safety does NOT unload modules imported while it was off —
+        # evict the demo module so nothing unsafe lingers in sys.modules.
+        sys.modules.pop("wishful.static.dangerzone", None)
 
 
 def example_review() -> None:
@@ -108,6 +111,10 @@ def example_review() -> None:
 
 
 def main() -> None:
+    # Make the demo's preconditions explicit — an ambient WISHFUL_UNSAFE=1 or
+    # WISHFUL_REVIEW=1 in the caller's environment must not change what the
+    # sections below demonstrate.
+    wishful.configure(allow_unsafe=False, review=False)
     example_security_error()
     example_allow_unsafe()
     example_review()

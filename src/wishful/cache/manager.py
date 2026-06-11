@@ -21,9 +21,14 @@ def _validate_components(parts: list[str], fullname: str) -> None:
             raise ValueError(f"unsafe module name {fullname!r}: bad component {part!r}")
 
 
-def _within_cache(path: Path) -> Path:
-    """Resolve ``path`` and confirm it stays inside the cache dir (symlink-safe)."""
-    cache_root = settings.cache_dir.resolve()
+def _within_cache(path: Path, cache_dir: Path) -> Path:
+    """Resolve ``path`` and confirm it stays inside ``cache_dir`` (symlink-safe).
+
+    ``cache_dir`` is passed in (read once by the caller) so a concurrent
+    configure(cache_dir=...) between building the path and checking it can't
+    produce a spurious escape error.
+    """
+    cache_root = cache_dir.resolve()
     resolved = path.resolve()
     if resolved != cache_root and cache_root not in resolved.parents:
         raise ValueError(f"resolved cache path escapes the cache dir: {resolved}")
@@ -76,8 +81,9 @@ def module_path(fullname: str) -> Path:
     namespace, parts = _split_namespace(fullname)
     _validate_components(parts, fullname)
     relative = Path(*parts) if parts else Path("__init__")
-    base = settings.cache_dir / "_dynamic" if namespace == "dynamic" else settings.cache_dir
-    return _within_cache(base / relative.with_suffix(".py"))
+    cache_dir = settings.cache_dir  # read once; see _within_cache
+    base = cache_dir / "_dynamic" if namespace == "dynamic" else cache_dir
+    return _within_cache(base / relative.with_suffix(".py"), cache_dir)
 
 
 def dynamic_snapshot_path(fullname: str) -> Path:
@@ -85,7 +91,8 @@ def dynamic_snapshot_path(fullname: str) -> Path:
     _, parts = _split_namespace(fullname)
     _validate_components(parts, fullname)
     relative = Path(*parts) if parts else Path("__init__")
-    return _within_cache(settings.cache_dir / "_dynamic" / relative.with_suffix(".py"))
+    cache_dir = settings.cache_dir  # read once; see _within_cache
+    return _within_cache(cache_dir / "_dynamic" / relative.with_suffix(".py"), cache_dir)
 
 
 def ensure_cache_dir() -> Path:

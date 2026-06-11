@@ -1,3 +1,5 @@
+import time
+
 import pytest
 
 from wishful.cache import manager
@@ -169,15 +171,23 @@ class TestCrossProcessAtomicity:
             w.start()
 
         torn = []
+        deadline = time.monotonic() + 60  # escape hatch: a hung child must not hang CI
+        timed_out = False
         try:
             while any(w.is_alive() for w in writers):
+                if time.monotonic() > deadline:
+                    timed_out = True
+                    break
                 text = manager.read_cached("wishful.static.race_target")
                 if text is not None and text not in payloads.values():
                     torn.append(text[:120])
         finally:
             for w in writers:
                 w.join(timeout=30)
+                if w.is_alive():
+                    w.kill()
 
+        assert not timed_out, "writer processes did not finish before the deadline"
         assert not torn, f"torn reads observed: {torn[:2]}"
         for w in writers:
             assert w.exitcode == 0

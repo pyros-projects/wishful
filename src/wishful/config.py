@@ -4,7 +4,7 @@ import os
 import builtins
 import threading
 import warnings
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, fields
 from pathlib import Path
 from textwrap import dedent
 from typing import Optional
@@ -84,22 +84,8 @@ class Settings:
     context_radius: int = field(default_factory=lambda: int(os.getenv("WISHFUL_CONTEXT_RADIUS", "3")))
 
     def copy(self) -> "Settings":
-        return Settings(
-            model=self.model,
-            cache_dir=self.cache_dir,
-            review=self.review,
-            debug=self.debug,
-            allow_unsafe=self.allow_unsafe,
-            spinner=self.spinner,
-            max_tokens=self.max_tokens,
-            temperature=self.temperature,
-            system_prompt=self.system_prompt,
-            log_level=self.log_level,
-            log_to_file=self.log_to_file,
-            log_prompts=self.log_prompts,
-            request_timeout=self.request_timeout,
-            context_radius=self.context_radius,
-        )
+        # Field-driven so adding a Settings field can't silently miss the copy.
+        return Settings(**{f.name: getattr(self, f.name) for f in fields(self)})
 
 
 # Persist the settings object across module reloads (tests deliberately purge
@@ -109,8 +95,9 @@ if getattr(builtins, "_wishful_settings", None) is None:
     builtins._wishful_settings = Settings()  # type: ignore[attr-defined]  # dynamic stash on builtins
 settings = builtins._wishful_settings  # type: ignore[attr-defined]
 
-# Guards concurrent configure()/reset_defaults() so each caller's full update
-# lands atomically — threads never observe a half-applied configuration.
+# Serializes configure()/reset_defaults() WRITERS so each caller's full update
+# lands as a unit. Readers are deliberately lock-free: a thread reading two
+# settings while another configures can still see a mixed pair.
 _settings_lock = threading.Lock()
 
 
@@ -157,7 +144,8 @@ def configure(
 
     All parameters are optional; only provided values overwrite current
     settings. Accepts both strings and :class:`pathlib.Path` for `cache_dir`.
-    Thread-safe: concurrent callers each apply their full update atomically.
+    Concurrent configure() calls are serialized (writer lock); reads are
+    lock-free and may observe another writer's update mid-flight.
     """
     if context_radius is not None and context_radius < 0:
         raise ValueError("context_radius must be non-negative")
@@ -204,24 +192,13 @@ def configure(
 
 def reset_defaults() -> None:
     """Reset settings to environment-driven defaults (useful for tests)."""
-    # Create new defaults and copy to existing settings object
-    # This ensures all existing references to settings get updated
+    # Create new defaults and copy onto the existing settings object so every
+    # held reference updates. Field-driven: a new Settings field is reset
+    # automatically instead of silently keeping its pre-reset value.
     defaults = Settings()
     with _settings_lock:
-        settings.model = defaults.model
-        settings.cache_dir = defaults.cache_dir
-        settings.review = defaults.review
-        settings.debug = defaults.debug
-        settings.allow_unsafe = defaults.allow_unsafe
-        settings.spinner = defaults.spinner
-        settings.max_tokens = defaults.max_tokens
-        settings.temperature = defaults.temperature
-        settings.system_prompt = defaults.system_prompt
-        settings.log_level = defaults.log_level
-        settings.log_to_file = defaults.log_to_file
-        settings.log_prompts = defaults.log_prompts
-        settings.request_timeout = defaults.request_timeout
-        settings.context_radius = defaults.context_radius
+        for f in fields(defaults):
+            setattr(settings, f.name, getattr(defaults, f.name))
 
     logging_mod = _load_logging_module()
     if logging_mod:

@@ -43,7 +43,13 @@ class EvolutionResult:
     def __getattr__(self, name: str) -> Any:
         # Fires only for names not on the instance/class — i.e. everything the
         # winner carries (__name__, __wishful_source__, __wishful_evolution__, …).
-        return getattr(self.fn, name)
+        # Fetch fn via __dict__: during copy/deepcopy/unpickle an empty instance
+        # probes dunders before __init__ ran, and a plain self.fn would re-enter
+        # __getattr__ infinitely.
+        fn = self.__dict__.get("fn")
+        if fn is None:
+            raise AttributeError(name)
+        return getattr(fn, name)
 
     @property  # the class docstring must not shadow the winner's
     def __doc__(self) -> str | None:  # type: ignore[override]

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import ast
 import asyncio
+import concurrent.futures
 import os
 import re
 import sys
@@ -46,19 +47,37 @@ warnings.filterwarnings(
 # never nest_asyncio.
 _loop_lock = threading.Lock()
 _owned_loop: Optional[asyncio.AbstractEventLoop] = None
+_owned_thread: Optional[threading.Thread] = None
+_owned_pid: Optional[int] = None
 
 
 def _get_owned_loop() -> asyncio.AbstractEventLoop:
-    """Start (once) and return wishful's background event loop."""
-    global _owned_loop
+    """Start (or restart) and return wishful's background event loop.
+
+    A loop is only reusable while its runner thread is alive in THIS process:
+    a thread killed by an exception leaves ``is_closed() == False`` but never
+    runs another callback, and a fork (Linux-default multiprocessing) clones
+    the loop object without its thread — both used to hang future.result()
+    forever. Detect either case and start a fresh loop+thread pair.
+    """
+    global _owned_loop, _owned_thread, _owned_pid
     with _loop_lock:
-        if _owned_loop is not None and not _owned_loop.is_closed():
+        if (
+            _owned_loop is not None
+            and not _owned_loop.is_closed()
+            and _owned_thread is not None
+            and _owned_thread.is_alive()
+            and _owned_pid == os.getpid()
+        ):
             return _owned_loop
+        if _owned_loop is not None and not _owned_loop.is_closed() and _owned_pid == os.getpid():
+            _owned_loop.close()  # dead thread; release the loop's resources
         loop = asyncio.new_event_loop()
-        threading.Thread(
+        thread = threading.Thread(
             target=loop.run_forever, name="wishful-explore-loop", daemon=True
-        ).start()
-        _owned_loop = loop
+        )
+        thread.start()
+        _owned_loop, _owned_thread, _owned_pid = loop, thread, os.getpid()
         return loop
 
 
@@ -70,10 +89,23 @@ def _run_async(coro):
     host's loop is never re-entered or monkeypatched — the calling thread
     simply blocks until the exploration finishes, as a synchronous explore()
     has always done.
+
+    The wait is a watchdog poll rather than a bare ``future.result()``: if the
+    loop thread dies mid-run, the future would otherwise never resolve and the
+    caller would hang forever.
     """
     future = asyncio.run_coroutine_threadsafe(coro, _get_owned_loop())
     try:
-        return future.result()
+        while True:
+            try:
+                return future.result(timeout=1.0)
+            except concurrent.futures.TimeoutError:
+                if _owned_thread is not None and not _owned_thread.is_alive():
+                    future.cancel()
+                    raise RuntimeError(
+                        "wishful's exploration event-loop thread died mid-run; "
+                        "the next explore() call will start a fresh loop"
+                    ) from None
     except KeyboardInterrupt:
         future.cancel()
         raise
@@ -407,17 +439,25 @@ async def _generate_and_evaluate_async(
             # (run_user_callable) so a hanging candidate can't stall explore and
             # a SystemExit inside one can't kill the host. Timeouts and raised
             # BaseExceptions are recorded as variant failures; the loop continues.
+            # awaited via to_thread: run_user_callable blocks in worker.join, and
+            # this coroutine runs ON the owned loop — joining inline would stall
+            # the loop (starving concurrent explores and litellm logging) and
+            # deadlock any user test that itself calls explore().
             if test is None:
                 passed, error = True, None
             else:
-                ok, value, error = run_user_callable(partial(test, fn), timeout)
+                ok, value, error = await asyncio.to_thread(
+                    run_user_callable, partial(test, fn), timeout
+                )
                 passed = bool(ok and value)
                 if ok and not value:
                     error = "test returned False"
 
             score = None
             if passed and benchmark:
-                ok, score, bench_error = run_user_callable(partial(benchmark, fn), timeout)
+                ok, score, bench_error = await asyncio.to_thread(
+                    run_user_callable, partial(benchmark, fn), timeout
+                )
                 if not ok:
                     passed, score, error = False, None, bench_error
 

@@ -5,6 +5,28 @@ description: Notable changes to wishful.
 
 All notable changes to wishful will be documented here. Follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) and [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.1] - Unreleased
+
+### Changed
+
+- **`evolve()` now returns an `EvolutionResult`** instead of the bare winner function: callable like the winner (delegates `__call__`), proxies `__name__`/`__doc__`/`__wishful_source__`/`__wishful_evolution__`, sets `__wrapped__` for `inspect.signature()`, and carries the run's `history` and `best_score`. Code doing `isinstance(result, types.FunctionType)` must use `result.fn` instead. Exported as `wishful.EvolutionResult`.
+- **`__wishful_evolution__` gained a `schema_version` key** (int, currently `1`); treat unknown keys as forward-compatible additions.
+- **`wishful.settings.cache_dir` is now always an absolute path**, resolved at construction — `os.chdir()` can no longer silently move the cache. Comparisons against relative `Path` literals will no longer match.
+- **Dynamic modules are lazy**: attribute access returns a call wrapper without an LLM call (so `hasattr()` is always `True` for public names); generation happens only when the wrapper is invoked. Dynamic modules expose functions only — constants raise `AttributeError` at call time.
+- **explore() owns its event loop**: one persistent background loop on a wishful-owned daemon thread replaces the cached-loop + `nest_asyncio` design. `explore()` now works inside a running loop (Jupyter) without patching the host, including from a `test`/`benchmark` callable that itself calls `explore()`.
+- **`explore(verbose=...)` defaults to `sys.stdout.isatty()`** and `save_results` to the `WISHFUL_EXPLORE_SAVE_RESULTS` env var (on unless `"0"`), so headless runs stay quiet by default.
+
+### Added
+
+- **`context_radius` setting** (env `WISHFUL_CONTEXT_RADIUS`, default `3`): the import-site context capture radius is now a regular `Settings` field — `configure(context_radius=...)` and `reset_defaults()` aware; `set_context_radius()` is a thin wrapper.
+- **Nested wishes are rejected up front**: `import wishful.static.a.b` raises a clear `ImportError` (wish names are single-level) before any LLM call, instead of generating the parent and failing with "'…' is not a package".
+- **explore/evolve candidate containment**: user `test`/`benchmark`/`fitness` callables run on a bounded worker with a per-variant timeout; a hanging or `sys.exit()`-ing candidate is recorded as a variant failure instead of stalling the run or killing the host. `ExplorationError.failures` now carries full, untruncated failure text.
+- **`@wishful.type` schemas reach `explore()`**: registered type schemas and `output_for` bindings are included in explore's generation prompts.
+
+### Dependencies
+
+- **Removed `nest-asyncio`** — no longer needed with the owned event loop. Projects that imported it transitively through wishful must add it as a direct dependency.
+
 ## [0.3.0] - 2026-06-11
 
 ### Added

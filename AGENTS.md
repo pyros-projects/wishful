@@ -46,7 +46,7 @@ uv sync
 
 This reads `pyproject.toml` and `uv.lock`, creates a virtual env, and installs:
 
-- Runtime deps: `litellm`, `rich`, `python-dotenv`, `pydantic`, `loguru`, `nest-asyncio`
+- Runtime deps: `litellm`, `rich`, `python-dotenv`, `pydantic`, `loguru` (nest-asyncio was removed in 0.3.1: explore owns a persistent background event loop on a daemon thread instead of patching the host loop)
 - Dev deps: `pytest`, `pytest-cov`, `coverage`, `mypy`, `ruff`, `bandit`, `radon`
 
 ### Running commands (always via `uv run`)
@@ -199,7 +199,7 @@ From the root:
 - `pyproject.toml`  
   - Project metadata: name, version, description.
   - `requires-python = ">=3.12"`.
-- Runtime deps: `litellm`, `rich`, `python-dotenv`, `pydantic`, `loguru`, `nest-asyncio`
+- Runtime deps: `litellm`, `rich`, `python-dotenv`, `pydantic`, `loguru` (nest-asyncio was removed in 0.3.1: explore owns a persistent background event loop on a daemon thread instead of patching the host loop)
 - Dev deps under `[dependency-groups].dev`: `pytest`, `pytest-cov`, `coverage`, `mypy`, `ruff`, `bandit`, `radon`
   - Build system uses `uv_build` as backend.
   - Declares a `wishful` console script via `[project.scripts]` (`wishful = "wishful.__main__:main"`).
@@ -209,7 +209,7 @@ From the root:
 
 - `src/wishful/` – main package
   - `__init__.py`  
-    - Public API (`__all__`): `configure`, `clear_cache`, `inspect_cache`, `regenerate`, `reimport`, `set_context_radius`, `settings`, `reset_defaults`, `WishfulError`, `SecurityError`, `GenerationError`, `ExplorationError`, `EvolutionError`, `explore`, `evolve`.
+    - Public API (`__all__`): `configure`, `clear_cache`, `inspect_cache`, `regenerate`, `reimport`, `set_context_radius`, `settings`, `reset_defaults`, `WishfulError`, `SecurityError`, `GenerationError`, `ExplorationError`, `EvolutionError`, `EvolutionResult`, `explore`, `evolve`.
     - `wishful.type` (the type-registry decorator) is exposed as an attribute but **deliberately omitted from `__all__`** so `from wishful import *` does not shadow the builtin `type`.
     - `__version__` is derived from installed package metadata (`importlib.metadata.version`), not hardcoded; falls back to `"0.0.0+unknown"` in a source checkout.
     - Installs the import finder on import (`install_finder()`), so `import wishful` activates the magic.
@@ -271,7 +271,7 @@ From the root:
     - Forces per‑test cache dir under `tmp_path`.
     - Disables spinner and interactive review.
     - Keeps safety ON by default (`allow_unsafe=False`); the few tests that need a bypass opt in via the `unsafe_settings` fixture. Wipes modules and cache between tests.
-  - Individual test modules (326 tests total; prefer the total over per-file counts to avoid drift):
+  - Individual test modules (380+ tests; prefer `uv run pytest --collect-only -q | tail -1` over a hardcoded count to avoid drift):
     - `test_import_hook.py` – core import/loader behavior and cache semantics.
     - `test_cli.py` – CLI argument handling, `--json`, exit codes, and messaging.
     - `test_cache.py` – cache manager behavior.
@@ -284,8 +284,10 @@ From the root:
     - `test_namespaces.py` – static vs dynamic namespace behavior.
     - `test_explore.py` – explore() multi-variant generation.
     - `test_evolve.py` – evolve() generational improvement.
+    - `test_evolve_result.py` – the EvolutionResult wrapper and compile/LLM-path contract.
+    - `test_execution.py` – the shared compile_and_exec / run_user_callable seam.
 
-- `examples/` (15 examples, `00`–`14`)
+- `examples/` (17 examples, `00`–`16`)
   - `00_quick_start.py` through `06_omg_why.py` – basic usage patterns (`01_json_yaml`, `02_web_scraping`, `03_data_validation`, `04_format_conversion`, `05_api_client`, `06_omg_why`).
   - `07_typed_outputs.py` – demonstrates type registry with Pydantic, dataclasses, TypedDict.
   - `08_dynamic_vs_static.py` – shows difference between static (cached) and dynamic (runtime-aware) namespaces.
@@ -295,6 +297,8 @@ From the root:
   - `12_explore.py` – demonstrates `wishful.explore()` for multi-variant generation.
   - `13_explore_advanced.py` – LLM-as-judge, code golf, self-improving loops.
   - `14_evolve.py` – generational `wishful.evolve()` (deterministic offline demo with `WISHFUL_FAKE_LLM=1`).
+  - `15_cli_and_config.py` – CLI walkthrough (`--json`, exit codes) plus `configure()`/`reset_defaults()`; LLM-free.
+  - `16_safety_and_review.py` – `SecurityError` on a planted poisoned cache file, `allow_unsafe`, TTY-gated `review=True`; LLM-free.
 
 - `docs/ideas/advanced_context_discovery.md`
   - Design/brainstorm document for richer context discovery strategies.
@@ -368,7 +372,7 @@ Configuration is centralized in `src/wishful/config.py` via the `Settings` datac
 - `log_level: str` – logging level, uppercased (default `"WARNING"`, from `WISHFUL_LOG_LEVEL`).
 - `log_to_file: bool` – write logs to `{cache_dir}/_logs/`. **Default `False` (opt-in)** via `WISHFUL_LOG_TO_FILE=1`; a bare `import wishful` creates no files.
 - `request_timeout: float` – per-request LLM timeout in seconds (default 300, from `WISHFUL_REQUEST_TIMEOUT`).
-- (Context discovery radius is configured separately via `wishful.set_context_radius(n)` or `WISHFUL_CONTEXT_RADIUS`; it is not a `Settings` field.)
+- `context_radius` (env `WISHFUL_CONTEXT_RADIUS`, default `3`): lines of surrounding code captured per direction at the import site. A regular `Settings` field since 0.3.1 — `configure(context_radius=...)` and `reset_defaults()` aware; `wishful.set_context_radius(n)` is a thin wrapper.
 
 Use `wishful.configure(...)` at runtime to change these values programmatically:
 

@@ -13,7 +13,7 @@ from wishful.cache import manager as _cache
 from wishful.config import configure, reset_defaults, settings
 from wishful.core.discovery import set_context_radius as _set_context_radius
 from wishful.core.finder import install as install_finder
-from wishful.evolve import EvolutionError, evolve
+from wishful.evolve import EvolutionError, EvolutionResult, evolve
 from wishful.exceptions import WishfulError
 from wishful.explore import ExplorationError, explore
 from wishful.llm.client import GenerationError
@@ -39,6 +39,7 @@ __all__ = [
     "GenerationError",
     "ExplorationError",
     "EvolutionError",
+    "EvolutionResult",
     "explore",
     "evolve",
 ]

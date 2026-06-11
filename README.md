@@ -571,7 +571,7 @@ wishful/
 │   ├── explore/          # Multi-variant generation & selection
 │   ├── evolve/           # Generational evolution of functions
 │   └── safety/           # Safety validation
-├── tests/                # Test suite (326 tests)
+├── tests/                # Test suite (380+ tests)
 ├── examples/             # 17 usage examples
 │   ├── 00_quick_start.py
 │   ├── 01_json_yaml.py

@@ -681,12 +681,18 @@ class TestExploreTypeContext:
     """explore's generation calls carry registered type context (plan R12)."""
 
     def test_registered_schema_reaches_generation(self, monkeypatch):
-        import wishful
+        # Register into the registry instance the explorer module actually
+        # consults. Going through `wishful.type` is churn-fragile: tests that
+        # purge wishful.* modules (test_namespaces) leave this file's
+        # collection-time explorer bound to the OLD registry while a fresh
+        # `import wishful` writes to a NEW one.
+        registry = explorer_module.get_all_type_schemas.__globals__["_registry"]
 
-        @wishful.type(output_for="make_point")
         class Point:
             x: int
             y: int
+
+        registry.register(Point, output_for="make_point")
 
         seen = {}
 
@@ -733,3 +739,66 @@ class TestExploreTypeContext:
             save_results=False,
         )
         assert "g" in calls
+
+
+class TestOwnedLoopRobustness:
+    """The owned loop survives thread death and never wedges explore (review P1s)."""
+
+    @staticmethod
+    def _fake_generate(module, functions, context, **kwargs):
+        return "def f():\n    return 1\n"
+
+    def test_recovers_after_loop_thread_death(self, monkeypatch):
+        monkeypatch.setattr(
+            explorer_module, "agenerate_module_code", make_async_fake(self._fake_generate)
+        )
+
+        # Prime the loop, then kill its thread the way a real crash would: stop
+        # the loop so run_forever returns and the thread exits.
+        explore(
+            "wishful.static.robust1.f",
+            variants=1, test=lambda fn: True, verbose=False, save_results=False,
+        )
+        loop = explorer_module._owned_loop
+        thread = explorer_module._owned_thread
+        loop.call_soon_threadsafe(loop.stop)
+        thread.join(timeout=10)
+        assert not thread.is_alive()
+        assert not loop.is_closed()  # the trap: dead thread, loop looks healthy
+
+        # Next explore must detect the dead thread and start a fresh loop.
+        fn = explore(
+            "wishful.static.robust2.f",
+            variants=1, test=lambda fn: True, verbose=False, save_results=False,
+        )
+        assert fn() == 1
+        assert explorer_module._owned_loop is not loop
+
+    def test_reentrant_explore_inside_test_callable(self, monkeypatch):
+        """A user test that itself calls explore() must complete, not deadlock."""
+        monkeypatch.setattr(
+            explorer_module, "agenerate_module_code", make_async_fake(self._fake_generate)
+        )
+
+        def test_that_explores(fn):
+            inner = explore(
+                "wishful.static.inner.f",
+                variants=1, test=lambda g: g() == 1, verbose=False, save_results=False,
+            )
+            return inner() == 1 and fn() == 1
+
+        import time as _time
+
+        start = _time.perf_counter()
+        outer = explore(
+            "wishful.static.outer.f",
+            variants=1,
+            test=test_that_explores,
+            timeout_per_variant=20.0,
+            verbose=False,
+            save_results=False,
+        )
+        elapsed = _time.perf_counter() - start
+        assert outer() == 1
+        # Pre-fix this circular-waited until timeout_per_variant; now it's fast.
+        assert elapsed < 10.0, f"re-entrant explore took {elapsed:.1f}s — loop blocked?"

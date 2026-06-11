@@ -334,8 +334,7 @@ class MagicLoader(importlib.abc.Loader):
             if not _source_defines(source, name):
                 raise AttributeError(name)
 
-            path = self._write_source(source)
-            self._exec_source(source, module, ctx, clear_first=True, file_path=str(path))
+            self._commit_regeneration(source, module, ctx)
             # Re-attach for future misses after reload
             setattr(module, "__getattr__", _dynamic_getattr)  # type: ignore[assignment]
             if name in module.__dict__:
@@ -407,14 +406,42 @@ class MagicLoader(importlib.abc.Loader):
     def _missing_symbols(self, module: ModuleType, requested: list[str]) -> list[str]:
         return [name for name in requested if name not in module.__dict__]
 
+    def _commit_regeneration(self, source: str, module: ModuleType, context) -> None:
+        """Write the new source and re-exec the module; roll back on failure.
+
+        The commit-guard contract — a failed regeneration leaves the module and
+        its cached file untouched — must also hold when the generation defines
+        the requested symbol but raises during exec (an uninstalled import at
+        module top level, say). Snapshot the namespace and the previous file
+        before committing; restore both when the re-exec fails for any reason.
+        """
+        target_path = (
+            cache.module_path(self.fullname)
+            if self.mode == "static"
+            else cache.dynamic_snapshot_path(self.fullname)
+        )
+        prior_source = target_path.read_text() if target_path.exists() else None
+        prior_namespace = dict(module.__dict__)
+        path = self._write_source(source)
+        try:
+            self._exec_source(source, module, context, clear_first=True, file_path=str(path))
+        except BaseException:
+            module.__dict__.clear()
+            module.__dict__.update(prior_namespace)
+            if prior_source is not None:
+                self._write_source(prior_source)
+            else:
+                target_path.unlink(missing_ok=True)
+            raise
+
     def _regenerate_with(self, module: ModuleType, context) -> None:
         # Do NOT delete the existing cache first: a transient generation failure
         # would then destroy the working module. write_cached (via os.replace) is
-        # atomic, so the new source overwrites the old on success and the previous
-        # file survives untouched when generation raises.
+        # atomic, and _commit_regeneration restores the previous file and module
+        # namespace when the re-exec itself fails.
         desired = sorted(set(context.functions) | self._declared_symbols(module))
-        source, path = self._generate_and_cache(desired, context)
-        self._exec_source(source, module, context, clear_first=True, file_path=str(path))
+        source = self._generate_validated(desired, context)
+        self._commit_regeneration(source, module, context)
 
     def _call_with_runtime(self, module: ModuleType, func_name: str, args, kwargs):
         ctx = discover(self.fullname, runtime_context={"function": func_name, "args": args, "kwargs": kwargs})
@@ -428,8 +455,7 @@ class MagicLoader(importlib.abc.Loader):
         if not _source_defines(source, func_name):
             raise AttributeError(func_name)
 
-        path = self._write_source(source)
-        self._exec_source(source, module, ctx, clear_first=True, file_path=str(path))
+        self._commit_regeneration(source, module, ctx)
 
         target = module.__dict__.get(func_name)
         if callable(target):

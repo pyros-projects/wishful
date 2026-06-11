@@ -37,7 +37,14 @@ def compile_and_exec(
     """
     validate_code(source, allow_unsafe=settings.allow_unsafe)
     namespace: dict[str, Any] = {}
-    exec(compile(source, filename, "exec"), namespace)
+    try:
+        exec(compile(source, filename, "exec"), namespace)
+    except SystemExit as exc:
+        # `raise SystemExit` needs no imports, so the validator can't block it;
+        # uncontained it would kill the host process from a search loop.
+        raise ValueError(
+            f"generated source raised SystemExit({exc.code}) at module level"
+        ) from exc
     candidate = namespace.get(function_name)
     if not callable(candidate):
         raise ValueError(f"source did not define callable {function_name!r}")
@@ -57,6 +64,11 @@ def run_user_callable(
     running thread, so a timed-out callable keeps running, but the worker is a
     **daemon** thread: it is abandoned without leaking into interpreter
     shutdown or accumulating non-daemon threads across many timeouts.
+
+    Consequence of abandonment: a timed-out candidate runs CONCURRENTLY with
+    later variants until it finishes. CPU-bound stragglers can distort timing
+    benchmarks of subsequent variants, and shared fixtures touched by the
+    straggler can fail them — prefer side-effect-free tests/benchmarks.
     """
     outcome: dict[str, Any] = {}
 
