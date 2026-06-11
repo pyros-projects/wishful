@@ -537,7 +537,7 @@ WISHFUL_FAKE_LLM=1 uv run python examples/00_quick_start.py
 # Run with real LLM (requires API keys)
 uv run python examples/00_quick_start.py
 
-# 15 examples ship in examples/ (00_quick_start.py … 14_evolve.py)
+# 17 examples ship in examples/ (00_quick_start.py … 16_safety_and_review.py)
 ```
 
 ### Adding Dependencies
@@ -572,7 +572,7 @@ wishful/
 │   ├── evolve/           # Generational evolution of functions
 │   └── safety/           # Safety validation
 ├── tests/                # Test suite (326 tests)
-├── examples/             # 15 usage examples
+├── examples/             # 17 usage examples
 │   ├── 00_quick_start.py
 │   ├── 01_json_yaml.py
 │   ├── 02_web_scraping.py
@@ -584,10 +584,12 @@ wishful/
 │   ├── 08_dynamic_vs_static.py     # Static vs dynamic modes
 │   ├── 09_context_shenanigans.py   # Context discovery
 │   ├── 10_cosmic_horror_line_by_line.py
-│   ├── 11_logging.py
+│   ├── 11_logging.py               # Logging knobs: debug, levels, files, prompts
 │   ├── 12_explore.py               # Multi-variant exploration
 │   ├── 13_explore_advanced.py      # LLM-as-judge, self-improving loops
-│   └── 14_evolve.py                # Generational evolution
+│   ├── 14_evolve.py                # Generational evolution
+│   ├── 15_cli_and_config.py        # CLI (--json) + configure/reset_defaults
+│   └── 16_safety_and_review.py     # SecurityError, allow_unsafe, review=True
 └── pyproject.toml        # Project config
 ```
 

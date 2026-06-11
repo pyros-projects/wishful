@@ -134,6 +134,30 @@ def example_error_handling():
             print(f"    - {failure[:60]}...")
 
 
+def example_return_all():
+    """return_all=True: get every passing variant, not just the winner."""
+    heading("Example 6: return_all - Inspect Every Passing Variant")
+
+    variants = wishful.explore(
+        "wishful.static.strings.reverse_words",
+        variants=4,
+        test=lambda fn: fn("hello world") == "world hello",
+        return_all=True,  # list of ALL passing variants instead of one winner
+    )
+
+    print(f"\n✅ {len(variants)} variant(s) passed the test")
+    for fn in variants:
+        meta = fn.__wishful_metadata__
+        print(
+            f"  Variant #{meta['variant_index']}: "
+            f"generated in {meta['generation_time']:.1f}s, "
+            f"{len(fn.__wishful_source__)} chars of source"
+        )
+    # Pick your own winner by any criterion you like — e.g. shortest source.
+    shortest = min(variants, key=lambda fn: len(fn.__wishful_source__))
+    print(f"Shortest implementation says: {shortest('pick me please')!r}")
+
+
 def main():
     print("🔍 wishful.explore - Generate Multiple Variants\n")
     print("Generate multiple implementations and select the best through")
@@ -144,6 +168,7 @@ def main():
     example_combined()
     example_silent()
     example_error_handling()
+    example_return_all()
 
     # Show where CSV results are saved
     print("\n" + "=" * 60)
