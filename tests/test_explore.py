@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import asyncio
-import time
 
 import pytest
 
@@ -44,7 +43,7 @@ class TestExploreBasic:
 
         monkeypatch.setattr(explorer_module, "agenerate_module_code", make_async_fake(fake_generate))
 
-        fn = explore("wishful.static.test.fn", variants=5, verbose=False)
+        explore("wishful.static.test.fn", variants=5, verbose=False)
 
         assert call_count["n"] == 5
 

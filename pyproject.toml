@@ -19,6 +19,10 @@ dependencies = [
 [project.scripts]
 wishful = "wishful.__main__:main"
 
+[tool.ruff.lint.per-file-ignores]
+# Examples deliberately import wishful.* mid-file — that import IS the demo.
+"examples/*" = ["E402"]
+
 [build-system]
 requires = ["uv_build>=0.11.0,<1.0.0"]
 build-backend = "uv_build"

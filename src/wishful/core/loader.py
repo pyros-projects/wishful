@@ -7,6 +7,14 @@ import importlib.util
 import sys
 from types import ModuleType
 
+from wishful.cache import manager as cache
+from wishful.config import settings
+from wishful.core.discovery import discover
+from wishful.llm.client import GenerationError, generate_module_code
+from wishful.logging import logger
+from wishful.safety.validator import SecurityError, validate_code
+from wishful.ui import spinner
+
 
 def _is_promptable() -> bool:
     """True when ``input()`` can reach a human: a real TTY or an interactive kernel.
@@ -63,13 +71,6 @@ def _source_defines(source: str, name: str) -> bool:
                 return True
     return False
 
-from wishful.cache import manager as cache
-from wishful.config import settings
-from wishful.core.discovery import discover
-from wishful.llm.client import GenerationError, generate_module_code
-from wishful.logging import logger
-from wishful.safety.validator import SecurityError, validate_code
-from wishful.ui import spinner
 
 def _resolve_generate_module_code():
     """Use the generate_module_code function from the live loader module.

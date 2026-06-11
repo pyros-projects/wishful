@@ -30,7 +30,7 @@ def example_basic():
         test=lambda fn: fn("test@example.com hello") == ["test@example.com"],
     )
 
-    print(f"\n✅ Found working parser!")
+    print("\n✅ Found working parser!")
     result = parser("Contact: alice@example.com, bob@test.org")
     print(f"Result: {result}")
     print(f"Metadata: {parser.__wishful_metadata__}")
@@ -57,7 +57,7 @@ def example_benchmark():
         optimize="fastest",
     )
 
-    print(f"\n✅ Found fastest sort!")
+    print("\n✅ Found fastest sort!")
     result = fastest_sort([3, 1, 4, 1, 5, 9, 2, 6])
     print(f"Result: {result}")
     score = fastest_sort.__wishful_metadata__.get("benchmark_score")
@@ -95,7 +95,7 @@ def example_combined():
         optimize="fastest",
     )
 
-    print(f"\n✅ Found correct AND fast implementation!")
+    print("\n✅ Found correct AND fast implementation!")
     print(f"Test: {best([5, 2, 8, 1, 9])}")
 
 
@@ -127,7 +127,7 @@ def example_error_handling():
             test=lambda fn: fn() == "impossible_to_generate",
         )
     except wishful.ExplorationError as e:
-        print(f"\n❌ Caught ExplorationError!")
+        print("\n❌ Caught ExplorationError!")
         print(f"  Attempts: {e.attempts}")
         print(f"  Failures: {len(e.failures)}")
         for failure in e.failures[:2]:

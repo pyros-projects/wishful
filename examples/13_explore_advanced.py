@@ -81,7 +81,7 @@ def example_llm_as_judge():
         optimize="best_score",
     )
     
-    print(f"\n✅ Best variant (LLM-approved!):")
+    print("\n✅ Best variant (LLM-approved!):")
     print(f"   Score: {best.__wishful_metadata__.get('benchmark_score', 'N/A')}")
     print(f"   Test: slugify('Hello World') = '{best('Hello World')}'")
     print(f"\n   Source preview:\n{best.__wishful_source__[:200]}...")
@@ -114,18 +114,18 @@ def example_code_golf():
         "wishful.static.math.is_palindrome",
         variants=6,
         test=lambda fn: (
-            fn(121) == True and
-            fn(123) == False and
-            fn(1) == True and
-            fn(12321) == True and
-            fn(-121) == False  # Negative numbers aren't palindromes
+            fn(121) and
+            not fn(123) and
+            fn(1) and
+            fn(12321) and
+            not fn(-121)  # Negative numbers aren't palindromes
         ),
         benchmark=brevity_score,
         optimize="best_score",
     )
     
     source = winner.__wishful_source__
-    print(f"\n✅ Most concise implementation:")
+    print("\n✅ Most concise implementation:")
     print(f"   Length: {len(source)} characters")
     print(f"   Brevity score: {winner.__wishful_metadata__.get('benchmark_score', 'N/A')}")
     print(f"\n   Full source:\n{source}")
@@ -155,7 +155,7 @@ def example_self_improving():
         ),
     )
     
-    print(f"   Round 1 winner found!")
+    print("   Round 1 winner found!")
     
     # Round 2: Now benchmark AGAINST the round 1 winner
     print("\nRound 2: Finding faster implementation (benchmarked against Round 1)...")
@@ -196,7 +196,7 @@ def example_self_improving():
     )
     
     speedup = round2_winner.__wishful_metadata__.get('benchmark_score', 1.0)
-    print(f"\n✅ Self-improvement results:")
+    print("\n✅ Self-improvement results:")
     print(f"   Speedup vs Round 1: {speedup:.2f}x")
     if speedup > 1:
         print("   🚀 Round 2 found a FASTER implementation!")
@@ -268,7 +268,7 @@ def example_multi_objective():
         optimize="best_score",
     )
     
-    print(f"\n✅ Multi-objective winner:")
+    print("\n✅ Multi-objective winner:")
     print(f"   Final score: {winner.__wishful_metadata__.get('benchmark_score', 'N/A'):.0f}")
     print(f"   Test: quicksort([3,1,4]) = {winner([3, 1, 4])}")
 
@@ -348,9 +348,9 @@ def example_gauntlet():
         timeout_per_variant=45,  # Regex can be slow to generate
     )
     
-    print(f"\n✅ Email validator found!")
+    print("\n✅ Email validator found!")
     print(f"   Robustness score: {winner.__wishful_metadata__.get('benchmark_score', 0)}/120")
-    print(f"\n   Testing:")
+    print("\n   Testing:")
     for email in valid_emails[:3]:
         print(f"   '{email}' → {winner(email)}")
     for email in invalid_emails[:3]:

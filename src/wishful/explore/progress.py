@@ -286,110 +286,6 @@ class AsyncExploreLiveDisplay:
         )
 
 
-# Keep the streaming printer as fallback for non-async usage
-class ExploreProgressPrinter:
-    """Streaming progress printer that outputs immediately (sync fallback)."""
-
-    STATUS_SYMBOLS = {
-        "generating": ("⏳", "cyan"),
-        "testing": ("🔍", "blue"),
-        "passed": ("✅", "green"),
-        "failed": ("❌", "red"),
-        "error": ("💥", "red bold"),
-        "timeout": ("⏰", "yellow"),
-    }
-
-    def __init__(self, progress: ExploreProgress, console: Optional[Console] = None):
-        self.progress = progress
-        self.console = console or Console()
-        self._started = False
-
-    def start(self) -> None:
-        if self._started:
-            return
-        self._started = True
-
-        p = self.progress
-        self.console.print()
-        self.console.print(
-            Panel(
-                f"[bold cyan]{p.function_name}[/] from [dim]{p.module_path}[/]\n"
-                f"[dim]Strategy:[/] {p.optimize_strategy} • "
-                f"[dim]Variants:[/] {p.total_variants}",
-                title="[bold magenta]🔍 wishful.explore[/]",
-                border_style="magenta",
-                padding=(0, 2),
-            )
-        )
-        self.console.print()
-
-    def on_generation_start(self, index: int) -> None:
-        self.start()
-        import sys
-        self.console.print(
-            f"  [cyan]⏳ Variant {index}/{self.progress.total_variants - 1}[/] "
-            f"[dim]generating...[/]",
-            end="",
-        )
-        sys.stdout.flush()
-
-    def on_generation_complete(self, index: int, time_secs: float) -> None:
-        import sys
-        self.console.print(f" [dim]({time_secs:.1f}s)[/] ", end="")
-        sys.stdout.flush()
-
-    def on_test_start(self, index: int) -> None:
-        import sys
-        self.console.print("[blue]testing...[/] ", end="")
-        sys.stdout.flush()
-
-    def on_result(self, index: int, result: VariantResult) -> None:
-        symbol, style = self.STATUS_SYMBOLS.get(result.status, ("?", "dim"))
-        parts = [f"[{style}]{symbol} {result.status.upper()}[/]"]
-
-        if result.benchmark_score is not None:
-            parts.append(f"[yellow]score={result.benchmark_score:.2f}[/]")
-
-        if result.error_message:
-            parts.append(f"[dim]{result.error_message[:40]}...[/]")
-
-        self.console.print(" ".join(parts))
-
-    def on_timeout(self, index: int) -> None:
-        self.console.print("[yellow]⏰ TIMEOUT[/]")
-
-    def on_complete(self) -> None:
-        p = self.progress
-
-        table = Table(show_header=False, box=None, padding=(0, 1))
-        table.add_column(style="dim")
-        table.add_column()
-
-        table.add_row("Elapsed:", f"[cyan]{p.elapsed_time:.1f}s[/]")
-        table.add_row(
-            "Passed:",
-            f"[green]{p.passed_count}[/]" if p.passed_count else "[dim]0[/]",
-        )
-        table.add_row(
-            "Failed:",
-            f"[red]{p.failed_count}[/]" if p.failed_count else "[dim]0[/]",
-        )
-
-        if p.best_score is not None:
-            table.add_row("Best Score:", f"[yellow bold]{p.best_score:.2f}[/]")
-            table.add_row("Best Variant:", f"[yellow]#{p.best_variant_index}[/]")
-
-        self.console.print()
-        self.console.print(
-            Panel(
-                table,
-                title="[bold]Summary[/]",
-                border_style="green" if p.passed_count > 0 else "red",
-                padding=(0, 2),
-            )
-        )
-
-
 def save_exploration_results(progress: ExploreProgress) -> Path:
     """Save exploration results to CSV in the cache directory."""
     explore_dir = settings.cache_dir / "_explore"
@@ -409,14 +305,14 @@ def save_exploration_results(progress: ExploreProgress) -> Path:
     # Summary file
     summary_path = explore_dir / f"{progress.function_name}_{timestamp}_summary.txt"
     with open(summary_path, "w") as f:
-        f.write(f"Exploration Summary\n")
-        f.write(f"==================\n\n")
+        f.write("Exploration Summary\n")
+        f.write("==================\n\n")
         f.write(f"Module: {progress.module_path}\n")
         f.write(f"Function: {progress.function_name}\n")
         f.write(f"Strategy: {progress.optimize_strategy}\n")
         f.write(f"Total Variants: {progress.total_variants}\n")
         f.write(f"Elapsed Time: {progress.elapsed_time:.2f}s\n\n")
-        f.write(f"Results:\n")
+        f.write("Results:\n")
         f.write(f"  Passed: {progress.passed_count}\n")
         f.write(f"  Failed: {progress.failed_count}\n")
         if progress.best_score is not None:

@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import importlib
 import sys
+from importlib.metadata import PackageNotFoundError
+from importlib.metadata import version as _pkg_version
 from types import ModuleType
 from typing import List
 
@@ -105,9 +107,6 @@ def reimport(module_path: str) -> ModuleType:
     # Import fresh (this triggers wishful's import hook if it's a wishful.* module)
     return importlib.import_module(module_path)
 
-
-from importlib.metadata import PackageNotFoundError
-from importlib.metadata import version as _pkg_version
 
 try:
     __version__ = _pkg_version("wishful")
