@@ -322,6 +322,17 @@ def test_cache_hit_revalidates_poisoned_source(monkeypatch):
         importlib.import_module("wishful.static.poisoned")
 
 
+def test_regenerate_dynamic_preserves_static_namesake():
+    """regenerate('wishful.dynamic.x') must not delete the static x cache."""
+    manager.write_cached("wishful.static.report", "def s():\n    return 'static'\n")
+    manager.write_dynamic_snapshot("wishful.dynamic.report", "def d():\n    return 'dyn'\n")
+
+    regenerate("wishful.dynamic.report")
+
+    assert manager.has_cached("wishful.static.report")
+    assert not manager.dynamic_snapshot_path("wishful.dynamic.report").exists()
+
+
 def test_dynamic_writes_snapshot(monkeypatch):
     call_count = {"n": 0}
 

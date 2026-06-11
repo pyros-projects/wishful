@@ -140,15 +140,21 @@ def test_regenerate_defaults_to_static():
     manager.clear_cache()
 
 
-def test_cache_path_strips_namespaces():
-    """Cache paths should strip static/dynamic prefixes."""    
-    # All these should map to the same cache file
-    path1 = module_path("wishful.static.utils")
-    path2 = module_path("wishful.dynamic.utils")
-    path3 = module_path("wishful.utils")  # Legacy
-    
-    # They should all resolve to utils.py (without static/dynamic)
-    assert path1.name == "utils.py"
-    assert path2.name == "utils.py"
-    assert path3.name == "utils.py"
-    assert path1 == path2 == path3
+def test_cache_path_keeps_namespaces_disjoint():
+    """Static and dynamic caches must never address the same file.
+
+    Static (and the legacy unqualified form) live at <cache>/utils.py; dynamic
+    lives under <cache>/_dynamic/utils.py so the two namespaces cannot collide.
+    """
+    static = module_path("wishful.static.utils")
+    dynamic = module_path("wishful.dynamic.utils")
+    legacy = module_path("wishful.utils")  # unqualified -> static base
+
+    assert static.name == "utils.py"
+    assert dynamic.name == "utils.py"
+    assert legacy.name == "utils.py"
+
+    assert static == legacy
+    assert dynamic != static
+    assert "_dynamic" in dynamic.parts
+    assert "_dynamic" not in static.parts

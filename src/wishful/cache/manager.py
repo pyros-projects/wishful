@@ -29,25 +29,38 @@ def _atomic_write(path: Path, source: str) -> None:
         raise
 
 
-def module_path(fullname: str) -> Path:
-    # Strip leading namespace "wishful" (and static/dynamic) and map dots to directories.
+def _split_namespace(fullname: str) -> tuple[str | None, list[str]]:
+    """Split a wishful module name into its namespace and remaining path parts.
+
+    Returns ``("static"|"dynamic"|None, [rest])``. The namespace is preserved so
+    callers can keep static and dynamic caches on disjoint paths.
+    """
     parts = fullname.split(".")
-    if parts[0] == "wishful":
+    if parts and parts[0] == "wishful":
         parts = parts[1:]
-    # Also strip 'static' or 'dynamic' if present
+    namespace: str | None = None
     if parts and parts[0] in ("static", "dynamic"):
+        namespace = parts[0]
         parts = parts[1:]
+    return namespace, parts
+
+
+def module_path(fullname: str) -> Path:
+    """Map a module name to its cache file, keeping the namespace separate.
+
+    Static modules live at ``<cache>/<name>.py`` (the documented, user-editable
+    layout); dynamic modules live under ``<cache>/_dynamic/<name>.py`` so the two
+    namespaces can never address the same file.
+    """
+    namespace, parts = _split_namespace(fullname)
     relative = Path(*parts) if parts else Path("__init__")
-    return settings.cache_dir / relative.with_suffix(".py")
+    base = settings.cache_dir / "_dynamic" if namespace == "dynamic" else settings.cache_dir
+    return base / relative.with_suffix(".py")
 
 
 def dynamic_snapshot_path(fullname: str) -> Path:
-    """Path for storing dynamic-generation snapshots without affecting cache."""
-    parts = fullname.split(".")
-    if parts[0] == "wishful":
-        parts = parts[1:]
-    if parts and parts[0] in ("static", "dynamic"):
-        parts = parts[1:]
+    """Path for a dynamic-generation snapshot (always under ``_dynamic/``)."""
+    _, parts = _split_namespace(fullname)
     relative = Path(*parts) if parts else Path("__init__")
     return settings.cache_dir / "_dynamic" / relative.with_suffix(".py")
 

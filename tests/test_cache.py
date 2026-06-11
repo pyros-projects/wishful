@@ -51,3 +51,32 @@ def test_atomic_write_failure_leaves_original_intact(monkeypatch, tmp_path):
     assert manager.read_cached("wishful.static.keep") == original
     leftovers = list(manager.settings.cache_dir.glob("**/*.tmp"))
     assert leftovers == []
+
+
+# --- U5: cache namespacing ---------------------------------------------------
+
+
+def test_static_and_dynamic_never_share_a_path():
+    static = manager.module_path("wishful.static.foo")
+    dynamic = manager.module_path("wishful.dynamic.foo")
+    assert static != dynamic
+    assert "_dynamic" in dynamic.parts
+    assert "_dynamic" not in static.parts
+
+
+def test_static_module_path_unchanged():
+    """Static layout stays at <cache>/<name>.py (documented, user-editable)."""
+    p = manager.module_path("wishful.static.text")
+    assert p == manager.settings.cache_dir / "text.py"
+
+
+def test_delete_dynamic_does_not_touch_static(tmp_path):
+    manager.write_cached("wishful.static.shared", "def s():\n    return 'static'\n")
+    manager.write_dynamic_snapshot("wishful.dynamic.shared", "def d():\n    return 'dyn'\n")
+    assert manager.module_path("wishful.static.shared").exists()
+
+    manager.delete_cached("wishful.dynamic.shared")
+
+    # static survives; only the dynamic snapshot is gone
+    assert manager.read_cached("wishful.static.shared") == "def s():\n    return 'static'\n"
+    assert not manager.dynamic_snapshot_path("wishful.dynamic.shared").exists()
