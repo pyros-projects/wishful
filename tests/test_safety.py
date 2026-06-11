@@ -42,6 +42,13 @@ BLOCKED = [
     "g = {'__builtins__': 1}\ne = g['__builtins__']['eval']",
     "x = obj.__getattribute__('eval')",
     "m = something.__mro__",
+    # getattr with computed/variable attribute names (escape via indirection):
+    "a = '__class__'\ny = getattr((), a)",
+    "s = 'sy' + 'stem'\ng = getattr(o, s)",
+    "f = getattr(globals().get('__builtins__'), 'open')",
+    "x = getattr(o, '__bases__')",
+    "setattr(o, '__globals__', 1)",
+    "a='__class__'\nb='__bases__'\nc='__subclasses__'\nx=()\ny=getattr(x,a)\nz=getattr(y,b)[0]\nw=getattr(z,c)()",
 ]
 
 # Legitimate code that must keep passing — including a shadowed `os` local,
@@ -71,11 +78,14 @@ ALLOWED = [
     "value: int = 3\nresult = value",                               # ann-assign
 ]
 
-# Known residual bypasses: AST scanning cannot see computed/indirect access.
-# Documented as xfail so a future hardening that catches them surfaces as xpass.
+# Known residual bypasses: AST scanning fundamentally cannot follow reflective or
+# computed access through library indirection. Documented as xfail so a future
+# hardening that catches them surfaces as xpass. getattr/subscript with computed
+# *literal-class* names are now blocked; what remains needs a non-getattr
+# reflection primitive or value-level indirection the validator cannot model.
 RESIDUAL_BYPASSES = [
-    "m = globals().get('__builtins__')",          # builtins via dict .get(), not subscript
-    "r = getattr(obj, 'sys' + 'tem')",            # attribute name built at runtime
+    "import operator\nf = operator.attrgetter('__class__')",   # reflection via operator module
+    "m = {}.get('__builtins__')",                              # builtins via an arbitrary mapping's .get()
 ]
 
 

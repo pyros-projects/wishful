@@ -50,6 +50,10 @@ _FORBIDDEN_SUBSCRIPT_KEYS = {
     "eval", "exec", "compile", "__import__", "system", "popen",
 }
 
+# Literal attribute names that getattr/setattr/delattr/hasattr must not resolve —
+# the escape primitives plus the dangerous builtins reachable through them.
+_FORBIDDEN_GETATTR_NAMES = _ESCAPE_ATTRS | _DANGEROUS_BUILTINS | {"system", "popen"}
+
 _WRITE_MODES = {"w", "a", "+", "x"}
 
 
@@ -165,16 +169,38 @@ def _check_named_call(func_name: str, call: ast.Call) -> None:
         raise SecurityError(f"Forbidden call: {func_name}()")
     if func_name == "open":
         _validate_open_call(call)
-    if func_name == "getattr":
-        _check_getattr_call(call)
+    if func_name in {"getattr", "setattr", "delattr", "hasattr"}:
+        _check_reflection_call(func_name, call)
 
 
-def _check_getattr_call(call: ast.Call) -> None:
-    if call.args and isinstance(call.args[0], ast.Name) and call.args[0].id == "__builtins__":
-        raise SecurityError("getattr() on __builtins__ is blocked")
-    if len(call.args) >= 2 and isinstance(call.args[1], ast.Constant):
-        if str(call.args[1].value) in _FORBIDDEN_ATTR_STRINGS:
-            raise SecurityError(f"getattr() for forbidden attribute '{call.args[1].value}'")
+def _check_reflection_call(func_name: str, call: ast.Call) -> None:
+    """Constrain getattr/setattr/delattr/hasattr so they can't reach gadget
+    attributes via a computed name.
+
+    The escape-attr and bare-reference checks only see ``obj.__globals__``-style
+    syntax; ``getattr(obj, name)`` with a variable, concatenated, or otherwise
+    non-literal ``name`` slipped past everything. Require a literal attribute
+    name (so it is checked against the forbidden set) and forbid reaching the
+    builtins namespace as the object.
+    """
+    # Block reaching builtins as the target object: getattr(__builtins__, ...),
+    # getattr(globals()/vars()/locals(), ...).
+    if call.args:
+        target = call.args[0]
+        if isinstance(target, ast.Name) and target.id == "__builtins__":
+            raise SecurityError(f"{func_name}() on __builtins__ is blocked")
+        if isinstance(target, ast.Call) and isinstance(target.func, ast.Name):
+            if target.func.id in {"globals", "vars", "locals"}:
+                raise SecurityError(f"{func_name}() on {target.func.id}() is blocked")
+    if len(call.args) < 2:
+        return
+    name_node = call.args[1]
+    if not (isinstance(name_node, ast.Constant) and isinstance(name_node.value, str)):
+        raise SecurityError(
+            f"{func_name}() with a non-literal attribute name is blocked"
+        )
+    if name_node.value in _FORBIDDEN_GETATTR_NAMES:
+        raise SecurityError(f"{func_name}() for forbidden attribute {name_node.value!r}")
 
 
 def _check_attribute_call(attr: ast.Attribute, bound_names: set[str]) -> None:
