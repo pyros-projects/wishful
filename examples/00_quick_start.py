@@ -43,7 +43,8 @@ def example_nginx_logs():
 
 def example_read_README():
     heading("Example: read README and count headers")
-    # desired: loads text and counts headers
+    # desired: open(path) in read mode, count lines that start with '#', return the count.
+    # Use only built-in str methods; do not import os, sys, or subprocess.
     from wishful.static.text import count_headers
 
     records = count_headers(path="README.md")

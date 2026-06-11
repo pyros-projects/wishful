@@ -63,7 +63,9 @@ class Settings:
     debug: bool = field(default_factory=lambda: os.getenv("WISHFUL_DEBUG", "0") == "1")
     allow_unsafe: bool = field(default_factory=lambda: os.getenv("WISHFUL_UNSAFE", "0") == "1")
     spinner: bool = field(default_factory=lambda: os.getenv("WISHFUL_SPINNER", "1") != "0")
-    max_tokens: int = field(default_factory=lambda: int(os.getenv("WISHFUL_MAX_TOKENS", "4096")))
+    # Generous default: reasoning models (e.g. gpt-5.5) spend part of the budget
+    # on hidden reasoning tokens, so a small cap yields empty or truncated output.
+    max_tokens: int = field(default_factory=lambda: int(os.getenv("WISHFUL_MAX_TOKENS", "16384")))
     temperature: float = field(default_factory=lambda: float(os.getenv("WISHFUL_TEMPERATURE", "1")))
     system_prompt: str = field(default_factory=_resolve_system_prompt)
     log_level: str = field(default_factory=lambda: os.getenv("WISHFUL_LOG_LEVEL", "WARNING").upper())
