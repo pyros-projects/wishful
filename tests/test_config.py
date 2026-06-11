@@ -72,3 +72,53 @@ def test_settings_copy():
     assert copy.spinner is False
     assert original.spinner is True
     # Note: reset_wishful fixture will restore settings after test
+
+
+# --- U13: config contract ---------------------------------------------------
+
+
+def test_model_precedence_wishful_wins(monkeypatch):
+    from wishful.config import _resolve_model
+
+    monkeypatch.setenv("WISHFUL_MODEL", "openai/specific")
+    monkeypatch.setenv("DEFAULT_MODEL", "openai/generic")
+    assert _resolve_model() == "openai/specific"
+
+
+def test_model_precedence_default_is_fallback(monkeypatch):
+    from wishful.config import _resolve_model
+
+    monkeypatch.delenv("WISHFUL_MODEL", raising=False)
+    monkeypatch.setenv("DEFAULT_MODEL", "openai/generic")
+    assert _resolve_model() == "openai/generic"
+
+
+def test_model_builtin_default(monkeypatch):
+    from wishful.config import _resolve_model
+
+    monkeypatch.delenv("WISHFUL_MODEL", raising=False)
+    monkeypatch.delenv("DEFAULT_MODEL", raising=False)
+    assert _resolve_model() == "azure/gpt-4.1"
+
+
+def test_model_disagreement_warns(monkeypatch):
+    import pytest
+
+    from wishful.config import _resolve_model
+
+    monkeypatch.setenv("WISHFUL_MODEL", "openai/a")
+    monkeypatch.setenv("DEFAULT_MODEL", "openai/b")
+    with pytest.warns(UserWarning, match="WISHFUL_MODEL"):
+        assert _resolve_model() == "openai/a"
+
+
+def test_reset_defaults_rereads_env_uniformly(monkeypatch):
+    monkeypatch.setenv("WISHFUL_MODEL", "openai/fromenv")
+    monkeypatch.setenv("WISHFUL_MAX_TOKENS", "1234")
+    monkeypatch.setenv("WISHFUL_CACHE_DIR", "/tmp/wishful_env_cache")
+    monkeypatch.setenv("WISHFUL_REVIEW", "1")
+    reset_defaults()
+    assert settings.model == "openai/fromenv"
+    assert settings.max_tokens == 1234
+    assert str(settings.cache_dir) == "/tmp/wishful_env_cache"
+    assert settings.review is True

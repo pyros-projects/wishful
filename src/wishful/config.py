@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import os
 import builtins
+import warnings
 from dataclasses import dataclass, field
 from pathlib import Path
 from textwrap import dedent
@@ -14,46 +15,61 @@ from dotenv import load_dotenv
 load_dotenv()
 
 
-_DEFAULT_MODEL = os.getenv("DEFAULT_MODEL", os.getenv("WISHFUL_MODEL", "azure/gpt-4.1"))
-_DEFAULT_SYSTEM_PROMPT = os.getenv(
-    "WISHFUL_SYSTEM_PROMPT",
-    dedent(
-        """
-        You are a Python code generator. Output ONLY executable Python code.
-        - Do not wrap code in markdown fences.
-        - You may use any Python libraries available in the environment.
-        - Prefer simple, readable implementations.
-        - Avoid network calls, filesystem writes, subprocess, or shell execution.
-        - Include docstrings and type hints where helpful.
-        """
-    ).strip(),
-)
-_DEFAULT_LOG_LEVEL = os.getenv("WISHFUL_LOG_LEVEL", "WARNING").upper()
-# Opt-in: a library must not create files in the user's CWD just on import.
-_DEFAULT_LOG_TO_FILE = os.getenv("WISHFUL_LOG_TO_FILE", "0") == "1"
-_DEFAULT_REQUEST_TIMEOUT = float(os.getenv("WISHFUL_REQUEST_TIMEOUT", "300"))
+def _resolve_model() -> str:
+    """Resolve the model id with WISHFUL_MODEL taking precedence over DEFAULT_MODEL.
+
+    The wishful-specific variable wins over the generic one; a stale DEFAULT_MODEL
+    from other tooling must not silently override an explicit WISHFUL_MODEL.
+    """
+    specific = os.getenv("WISHFUL_MODEL")
+    generic = os.getenv("DEFAULT_MODEL")
+    if specific and generic and specific != generic:
+        warnings.warn(
+            f"Both WISHFUL_MODEL ({specific!r}) and DEFAULT_MODEL ({generic!r}) are set; "
+            f"using WISHFUL_MODEL. DEFAULT_MODEL is only the fallback.",
+            stacklevel=2,
+        )
+    return specific or generic or "azure/gpt-4.1"
+
+
+def _resolve_system_prompt() -> str:
+    return os.getenv(
+        "WISHFUL_SYSTEM_PROMPT",
+        dedent(
+            """
+            You are a Python code generator. Output ONLY executable Python code.
+            - Do not wrap code in markdown fences.
+            - You may use any Python libraries available in the environment.
+            - Prefer simple, readable implementations.
+            - Avoid network calls, filesystem writes, subprocess, or shell execution.
+            - Include docstrings and type hints where helpful.
+            """
+        ).strip(),
+    )
 
 
 @dataclass
 class Settings:
     """Runtime configuration for wishful.
 
-    Values are mutable at runtime via :func:`configure` to make tests and user
-    code ergonomics-friendly. Defaults are sourced from environment variables.
+    Values are mutable at runtime via :func:`configure`. Every env-derived field
+    uses a default_factory so that constructing a fresh ``Settings()`` (as
+    :func:`reset_defaults` does) re-reads the current environment uniformly.
     """
 
-    model: str = _DEFAULT_MODEL
+    model: str = field(default_factory=_resolve_model)
     cache_dir: Path = field(default_factory=lambda: Path(os.getenv("WISHFUL_CACHE_DIR", ".wishful")))
-    review: bool = os.getenv("WISHFUL_REVIEW", "0") == "1"
-    debug: bool = os.getenv("WISHFUL_DEBUG", "0") == "1"
-    allow_unsafe: bool = os.getenv("WISHFUL_UNSAFE", "0") == "1"
-    spinner: bool = os.getenv("WISHFUL_SPINNER", "1") != "0"
-    max_tokens: int = int(os.getenv("WISHFUL_MAX_TOKENS", "4096"))
-    temperature: float = float(os.getenv("WISHFUL_TEMPERATURE", "1"))
-    system_prompt: str = _DEFAULT_SYSTEM_PROMPT
-    log_level: str = _DEFAULT_LOG_LEVEL
-    log_to_file: bool = _DEFAULT_LOG_TO_FILE
-    request_timeout: float = _DEFAULT_REQUEST_TIMEOUT
+    review: bool = field(default_factory=lambda: os.getenv("WISHFUL_REVIEW", "0") == "1")
+    debug: bool = field(default_factory=lambda: os.getenv("WISHFUL_DEBUG", "0") == "1")
+    allow_unsafe: bool = field(default_factory=lambda: os.getenv("WISHFUL_UNSAFE", "0") == "1")
+    spinner: bool = field(default_factory=lambda: os.getenv("WISHFUL_SPINNER", "1") != "0")
+    max_tokens: int = field(default_factory=lambda: int(os.getenv("WISHFUL_MAX_TOKENS", "4096")))
+    temperature: float = field(default_factory=lambda: float(os.getenv("WISHFUL_TEMPERATURE", "1")))
+    system_prompt: str = field(default_factory=_resolve_system_prompt)
+    log_level: str = field(default_factory=lambda: os.getenv("WISHFUL_LOG_LEVEL", "WARNING").upper())
+    # Opt-in: a library must not create files in the user's CWD just on import.
+    log_to_file: bool = field(default_factory=lambda: os.getenv("WISHFUL_LOG_TO_FILE", "0") == "1")
+    request_timeout: float = field(default_factory=lambda: float(os.getenv("WISHFUL_REQUEST_TIMEOUT", "300")))
 
     def copy(self) -> "Settings":
         return Settings(
