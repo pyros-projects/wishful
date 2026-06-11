@@ -15,6 +15,7 @@ from typing import Callable, List, Literal, Optional, Tuple, Union
 from wishful.cache.manager import read_cached, write_cached
 from wishful.config import settings
 from wishful.explore.exceptions import ExplorationError
+from wishful.logging import logger
 from wishful.explore.progress import (
     AsyncExploreLiveDisplay,
     ExploreProgress,
@@ -117,6 +118,21 @@ def _merge_into_module(existing, function_name: str, winner_source: str) -> str:
         prefix = ast.unparse(tree).rstrip()
     if not prefix.strip():
         return winner_source
+    # The winner is appended after the kept siblings, so any top-level name it
+    # shares with a sibling silently rebinds that sibling (later definition wins at
+    # exec). We can't safely rename without risking the winner, but a silent wipe
+    # violates the "exploring one function must not wipe its siblings" contract —
+    # surface it loudly so the caller knows the cache no longer holds the original.
+    collisions = (
+        _top_level_names(prefix) & _top_level_names(winner_source)
+    ) - {function_name}
+    if collisions:
+        logger.warning(
+            "explore(): the winner for {} redefines existing sibling symbol(s) {}; "
+            "its definitions shadow the cached ones in the merged module.",
+            function_name,
+            ", ".join(sorted(collisions)),
+        )
     merged = _hoist_future_imports(prefix + "\n\n\n" + winner_source.lstrip())
     # ast.parse (used by the validator) does not enforce __future__ placement, but
     # compile() does — verify the merged file actually compiles, else fall back to
@@ -126,6 +142,25 @@ def _merge_into_module(existing, function_name: str, winner_source: str) -> str:
     except SyntaxError:
         return winner_source
     return merged
+
+
+def _top_level_names(source: str) -> set[str]:
+    """Top-level def/class/assignment names bound by ``source`` (best-effort)."""
+    try:
+        tree = ast.parse(source)
+    except SyntaxError:
+        return set()
+    names: set[str] = set()
+    for node in tree.body:
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+            names.add(node.name)
+        elif isinstance(node, ast.Assign):
+            for target in node.targets:
+                if isinstance(target, ast.Name):
+                    names.add(target.id)
+        elif isinstance(node, ast.AnnAssign) and isinstance(node.target, ast.Name):
+            names.add(node.target.id)
+    return names
 
 
 _FUTURE_RE = re.compile(r"^[ \t]*from[ \t]+__future__[ \t]+import[ \t]+.*$", re.MULTILINE)

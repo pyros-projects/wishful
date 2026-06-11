@@ -73,6 +73,26 @@ class TestWinnerMerge:
         compile(merged, "<test>", "exec")  # would raise if __future__ were mid-file
         assert merged.startswith("from __future__ import annotations")
 
+    def test_merge_warns_on_sibling_name_collision(self):
+        """A winner whose helper shares a sibling's name silently shadows it after
+        the merge; that must at least be logged, not silent."""
+        from loguru import logger as loguru_logger
+
+        from wishful.explore.explorer import _merge_into_module
+
+        existing = "def keep_me():\n    return 'orig'\n\n\ndef helper():\n    return 1\n"
+        # The winner redefines `helper`, an existing sibling.
+        winner = "def helper():\n    return 2\n\n\ndef target():\n    return helper()\n"
+
+        records: list[str] = []
+        sink_id = loguru_logger.add(lambda m: records.append(str(m)), level="WARNING")
+        try:
+            _merge_into_module(existing, "target", winner)
+        finally:
+            loguru_logger.remove(sink_id)
+
+        assert any("helper" in r and "shadow" in r.lower() for r in records), records
+
     def test_dangerous_sibling_does_not_sink_winner(self, monkeypatch, tmp_path):
         import wishful
         from wishful.cache import manager
