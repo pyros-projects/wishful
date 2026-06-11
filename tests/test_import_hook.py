@@ -568,6 +568,58 @@ def test_ipykernel_counts_as_promptable(monkeypatch):
     assert loader._is_promptable() is True
 
 
+def test_review_rejection_on_cache_hit_preserves_file(monkeypatch):
+    """Rejecting the prompt for an ALREADY-cached module must not delete the
+    user's (possibly hand-edited) cache file. Only a freshly generated rejection
+    is discarded; a cache-hit rejection just declines to run it this time."""
+    manager.clear_cache()
+    _reset_modules()
+    manager.write_cached("wishful.static.approved", "def foo():\n    return 'ok'\n")
+    configure(review=True)
+    monkeypatch.setattr(loader, "_is_promptable", lambda: True)
+    monkeypatch.setattr("builtins.input", lambda prompt="": "n")  # reject
+
+    with pytest.raises(ImportError):
+        importlib.import_module("wishful.static.approved")
+    assert manager.has_cached("wishful.static.approved")  # survived the rejection
+
+
+def test_runtime_failing_generation_is_not_cached(monkeypatch):
+    """A fresh generation that compiles and validates but raises at exec must not
+    be left in the cache — otherwise the cache-hit path re-execs it and the import
+    breaks permanently."""
+    def gen(module, functions, context, **kwargs):
+        return "raise RuntimeError('boom at import time')\n"
+
+    monkeypatch.setattr(loader, "generate_module_code", gen)
+    manager.clear_cache()
+    _reset_modules()
+
+    with pytest.raises(RuntimeError):
+        importlib.import_module("wishful.static.runtimefail")
+    assert not manager.has_cached("wishful.static.runtimefail")
+
+
+def test_failed_regeneration_preserves_existing_cache(monkeypatch):
+    """A transient LLM failure while regenerating for a missing symbol must not
+    destroy the working cache that was already on disk."""
+    manager.clear_cache()
+    _reset_modules()
+    manager.write_cached("wishful.static.partial", "def foo():\n    return 'foo'\n")
+
+    def gen(module, functions, context, **kwargs):
+        raise GenerationError("provider down")
+
+    monkeypatch.setattr(loader, "generate_module_code", gen)
+    configure(review=False)
+
+    with pytest.raises((GenerationError, ImportError)):
+        from wishful.static.partial import bar  # noqa: F401 -- missing symbol -> _regenerate_with
+
+    assert manager.has_cached("wishful.static.partial")
+    assert "def foo" in (manager.read_cached("wishful.static.partial") or "")
+
+
 # --- U9: safety-ON test posture ---------------------------------------------
 
 

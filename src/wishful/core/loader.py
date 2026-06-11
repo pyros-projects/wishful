@@ -164,7 +164,7 @@ class MagicLoader(importlib.abc.Loader):
 
         # _exec_source runs validate -> review -> exec, so approval gates real
         # execution on every path (including the syntax-retry and regen paths).
-        self._exec_source(source, module, context, file_path=file_path)
+        self._exec_source(source, module, context, file_path=file_path, from_cache=from_cache)
         self._ensure_symbols(module, context, from_cache)
         if self.mode != "dynamic":
             self._attach_dynamic_getattr(module)
@@ -235,6 +235,7 @@ class MagicLoader(importlib.abc.Loader):
         clear_first: bool = False,
         file_path: str | None = None,
         allow_retry: bool = True,
+        from_cache: bool = False,
     ) -> None:
         filename = file_path or str(cache.module_path(self.fullname))
         try:
@@ -271,7 +272,7 @@ class MagicLoader(importlib.abc.Loader):
 
         # Validated. Ask for approval BEFORE executing so the gate actually
         # guards execution (it used to run after exec — the code had already run).
-        self._maybe_review(source)
+        self._maybe_review(source, from_cache=from_cache)
         # Preserve the module machinery across a clear+re-exec — the generated
         # source doesn't define these, so without this the module would lose its
         # name/spec/loader identity after the first dynamic regeneration.
@@ -288,7 +289,17 @@ class MagicLoader(importlib.abc.Loader):
             module.__dict__.update(preserved)
         module.__file__ = filename
         module.__package__ = self.fullname.rpartition('.')[0]
-        exec(code_obj, module.__dict__)
+        try:
+            exec(code_obj, module.__dict__)
+        except Exception:
+            # A freshly generated module that compiled and validated but raises at
+            # exec must not survive in the cache — otherwise the cache-hit path
+            # re-execs it and the import breaks permanently. A cache-hit (or
+            # user-edited) file is left alone; surfacing its error beats silently
+            # deleting the user's data.
+            if self.mode == "static" and not from_cache:
+                cache.delete_cached(self.fullname)
+            raise
 
     def _attach_dynamic_getattr(self, module: ModuleType) -> None:
         def _dynamic_getattr(name: str):
@@ -362,7 +373,7 @@ class MagicLoader(importlib.abc.Loader):
 
         self._regenerate_with(module, context)
 
-    def _maybe_review(self, source: str) -> None:
+    def _maybe_review(self, source: str, from_cache: bool = False) -> None:
         if not settings.review:
             return
         self._ensure_review_possible()
@@ -372,15 +383,22 @@ class MagicLoader(importlib.abc.Loader):
         except EOFError:
             answer = "n"  # fail closed: no input means no approval
         if answer.lower().strip() not in {"y", "yes"}:
-            cache.delete_cached(self.fullname)
+            # Only discard a *freshly generated* rejection. A cache-hit file was
+            # approved before (or hand-edited by the user); rejecting it now means
+            # "don't run it this time", not "delete my file".
+            if not from_cache:
+                cache.delete_cached(self.fullname)
             raise ImportError("User rejected generated code.")
 
     def _missing_symbols(self, module: ModuleType, requested: list[str]) -> list[str]:
         return [name for name in requested if name not in module.__dict__]
 
     def _regenerate_with(self, module: ModuleType, context) -> None:
+        # Do NOT delete the existing cache first: a transient generation failure
+        # would then destroy the working module. write_cached (via os.replace) is
+        # atomic, so the new source overwrites the old on success and the previous
+        # file survives untouched when generation raises.
         desired = sorted(set(context.functions) | self._declared_symbols(module))
-        cache.delete_cached(self.fullname)
         source, path = self._generate_and_cache(desired, context)
         self._exec_source(source, module, context, clear_first=True, file_path=str(path))
 
