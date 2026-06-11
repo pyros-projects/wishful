@@ -27,6 +27,12 @@ markers = [
     "smoke: real-model smoke test, run only with WISHFUL_SMOKE=1 and credentials",
 ]
 
+[tool.bandit]
+# B102 (exec_used): executing LLM-generated code IS this library's product;
+# the exec sites are gated by the validator + review gate (see safety docs).
+# B110 (try_except_pass): the config->logging fallback chain is deliberate.
+skips = ["B102", "B110"]
+
 [tool.mypy]
 python_version = "3.12"
 

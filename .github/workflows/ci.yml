@@ -1,35 +1,130 @@
-name: test
+name: CI
 
 on:
   pull_request:
   push:
-    branches:
-      - main
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  # The suite is designed to run without network or credentials.
+  WISHFUL_FAKE_LLM: "1"
+  WISHFUL_LOG_TO_FILE: "0"
 
 jobs:
-  tests:
+  lint:
+    name: Lint, types, security scan
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: Set up Python
-        uses: actions/setup-python@v5
+      - uses: astral-sh/setup-uv@v5
         with:
-          python-version: "3.12"
-
-      - name: Install uv
-        run: |
-          curl -LsSf https://astral.sh/uv/install.sh | sh
-          echo "$HOME/.cargo/bin" >> $GITHUB_PATH
+          enable-cache: true
 
       - name: Sync dependencies
         run: uv sync --frozen
 
+      - name: Ruff
+        run: uv run ruff check .
+
+      - name: Mypy
+        run: uv run mypy src/wishful
+
+      - name: Bandit
+        run: uv run bandit -c pyproject.toml -r src/wishful -q
+
+  test:
+    name: Tests (py${{ matrix.python }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python: ["3.12", "3.13"]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+          python-version: ${{ matrix.python }}
+
+      - name: Sync dependencies
+        run: uv sync --frozen
+
+      # fail_under (coverage gate) comes from [tool.coverage.report] in pyproject.
       - name: Run tests with coverage gate
-        env:
-          WISHFUL_FAKE_LLM: "1"
         run: uv run pytest -q --cov=wishful --cov-report=term-missing
 
-      - name: Lint
-        run: uv run ruff check .
+  examples:
+    name: Examples (offline sweep)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - name: Sync dependencies
+        run: uv sync --frozen
+
+      # Only the examples that are deterministic under WISHFUL_FAKE_LLM=1 /
+      # LLM-free run here; the rest need a real model and are covered by the
+      # manual smoke workflow.
+      - name: Run offline-safe examples
+        run: |
+          set -e
+          for ex in 11_logging 14_evolve 15_cli_and_config 16_safety_and_review; do
+            echo "=== examples/$ex.py ==="
+            uv run python "examples/$ex.py"
+          done
+
+  build:
+    name: Build & import check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - name: Build sdist and wheel
+        run: uv build
+
+      - name: Install wheel into a clean env and import
+        run: |
+          uv venv /tmp/smoke-venv
+          uv pip install --python /tmp/smoke-venv/bin/python dist/*.whl
+          /tmp/smoke-venv/bin/python -c "import wishful; print(f'wishful {wishful.__version__} imports cleanly')"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dist
+          path: dist/*
+          retention-days: 7
+
+  docs:
+    name: Docs build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: docs-site/package-lock.json
+
+      - name: Build docs site
+        working-directory: docs-site
+        run: |
+          npm ci
+          npm run build

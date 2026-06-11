@@ -1,0 +1,49 @@
+name: Real-model smoke
+
+# Manual, credentialed proof run: executes the gated smoke harness
+# (tests/smoke/) against a real model and uploads the proof bundle.
+# Needs the OPENAI_API_KEY repo secret. Costs real tokens — never automatic.
+on:
+  workflow_dispatch:
+    inputs:
+      model:
+        description: "litellm model id"
+        required: false
+        default: "openai/gpt-4.1"
+
+permissions:
+  contents: read
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - name: Sync dependencies
+        run: uv sync --frozen
+
+      - name: Run gated smoke harness
+        env:
+          WISHFUL_SMOKE: "1"
+          WISHFUL_MODEL: ${{ inputs.model }}
+          WISHFUL_LOG_TO_FILE: "0"
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+        run: |
+          if [ -z "$OPENAI_API_KEY" ]; then
+            echo "::error::OPENAI_API_KEY secret is not configured"
+            exit 1
+          fi
+          uv run pytest tests/smoke/ -q
+
+      # Proof bundles are metadata-only by design (no prompts, no source).
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: proof-bundle
+          path: docs/proofs/
+          retention-days: 90
